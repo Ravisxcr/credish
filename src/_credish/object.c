@@ -15,6 +15,14 @@ credishObject *obj_create_string(const char *data, int len) {
     return o;
 }
 
+credishObject *obj_steal_string(sds s) {
+    credishObject *o = bufpool_alloc(sizeof(*o));
+    if (!o) return NULL;
+    o->type = OBJ_STRING;
+    o->ptr  = s;
+    return o;
+}
+
 credishObject *obj_create_string_int(int64_t val) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;

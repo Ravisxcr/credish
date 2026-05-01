@@ -257,8 +257,8 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
     sds val_sds = pyobj_to_sds(val_obj);
     if (!val_sds) return NULL;
 
-    credishObject *o = obj_create_string(val_sds, (int)SDS_LEN(val_sds));
-    sds_free(val_sds);
+    credishObject *o = obj_steal_string(val_sds);
+    if (!o) { sds_free(val_sds); return PyErr_NoMemory(); }
 
     pthread_rwlock_wrlock(&s->lock);
     credish_db *db = store_select_db(s, 0);

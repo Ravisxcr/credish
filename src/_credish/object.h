@@ -2,6 +2,7 @@
 #define CREDISH_OBJECT_H
 
 #include <stdint.h>
+#include "sds.h"
 
 /* Object type tags — match Redis type numbers */
 #define OBJ_STRING  0
@@ -24,6 +25,7 @@ typedef struct credishObject {
 } credishObject;
 
 credishObject *obj_create_string(const char *data, int len);
+credishObject *obj_steal_string(sds s);   /* takes ownership of s — no copy */
 credishObject *obj_create_string_int(int64_t val);
 credishObject *obj_create_list(void);
 credishObject *obj_create_hash(void);
