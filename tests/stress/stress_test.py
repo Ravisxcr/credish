@@ -224,7 +224,7 @@ def stress_concurrent_counters(client: CredishClient) -> None:
     expected = NTHREADS * INCS
     actual = int(client.get(key))
     status = "OK" if actual == expected else f"MISMATCH: got {actual}, expected {expected}"
-    print(f"  {'concurrent counter ({NTHREADS}t)':<28s}  {'—':>10}           [{status}]")
+    print(f"  {f'concurrent counter ({NTHREADS}t)':<28s}  {'—':>10}           [{status}]")
 
 
 # ---------------------------------------------------------------------------

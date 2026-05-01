@@ -7,7 +7,7 @@ import time
 import tempfile
 from credish import CredishClient
 
-N = 100_000
+N = 1_000_000
 
 
 def bench(label, fn):
