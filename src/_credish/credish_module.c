@@ -8,6 +8,7 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include "bufpool.h"
 #include "db.h"
 #include "object.h"
 #include "sds.h"
@@ -633,5 +634,6 @@ static struct PyModuleDef credish_module = {
 };
 
 PyMODINIT_FUNC PyInit__credish(void) {
+    bufpool_init();
     return PyModule_Create(&credish_module);
 }

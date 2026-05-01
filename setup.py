@@ -3,6 +3,7 @@ import os
 
 _credish_sources = [
     "src/_credish/credish_module.c",
+    "src/_credish/bufpool.c",
     "src/_credish/sds.c",
     "src/_credish/dict.c",
     "src/_credish/adlist.c",

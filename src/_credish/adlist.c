@@ -1,8 +1,11 @@
 #include "adlist.h"
+#include "bufpool.h"
 #include <stdlib.h>
+#include <string.h>
 
 adlist *adlist_create(void) {
-    adlist *l = calloc(1, sizeof(*l));
+    adlist *l = bufpool_alloc(sizeof(*l));
+    if (l) memset(l, 0, sizeof(*l));
     return l;
 }
 
@@ -11,14 +14,14 @@ void adlist_free(adlist *l, void (*free_val)(void *)) {
     while (n) {
         listNode *next = n->next;
         if (free_val) free_val(n->value);
-        free(n);
+        bufpool_free(n, sizeof(*n));
         n = next;
     }
-    free(l);
+    bufpool_free(l, sizeof(*l));
 }
 
 static listNode *node_new(void *value) {
-    listNode *n = malloc(sizeof(*n));
+    listNode *n = bufpool_alloc(sizeof(*n));
     if (!n) return NULL;
     n->value = value;
     n->prev  = n->next = NULL;
@@ -52,7 +55,7 @@ void *adlist_pop_head(adlist *l) {
     l->head     = n->next;
     if (l->head) l->head->prev = NULL;
     else         l->tail = NULL;
-    free(n);
+    bufpool_free(n, sizeof(*n));
     l->len--;
     return val;
 }
@@ -64,7 +67,7 @@ void *adlist_pop_tail(adlist *l) {
     l->tail     = n->prev;
     if (l->tail) l->tail->next = NULL;
     else         l->head = NULL;
-    free(n);
+    bufpool_free(n, sizeof(*n));
     l->len--;
     return val;
 }
@@ -88,7 +91,7 @@ void adlist_delete_node(adlist *l, listNode *node, void (*free_val)(void *)) {
     if (node->next) node->next->prev = node->prev;
     else            l->tail          = node->prev;
     if (free_val) free_val(node->value);
-    free(node);
+    bufpool_free(node, sizeof(*node));
     l->len--;
 }
 

@@ -1,4 +1,5 @@
 #include "dict.h"
+#include "bufpool.h"
 #include "sds.h"
 #include <stdlib.h>
 #include <string.h>
@@ -42,9 +43,10 @@ int dict_cmp_sds(const void *a, const void *b) {
 /* ------------------------------------------------------------------ */
 
 dict *dict_create(dictType *type) {
-    dict *d = calloc(1, sizeof(*d));
+    dict *d = bufpool_alloc(sizeof(*d));
     if (!d) return NULL;
-    d->type      = type;
+    memset(d, 0, sizeof(*d));
+    d->type       = type;
     d->rehash_idx = -1;
     return d;
 }
@@ -58,7 +60,7 @@ static void dict_table_free(dict *d, int table) {
             dictEntry *next = e->next;
             if (d->type->key_free) d->type->key_free(e->key);
             if (d->type->val_free) d->type->val_free(e->v.val);
-            free(e);
+            bufpool_free(e, sizeof(*e));
             e = next;
         }
     }
@@ -69,7 +71,7 @@ static void dict_table_free(dict *d, int table) {
 void dict_free(dict *d) {
     dict_table_free(d, 0);
     dict_table_free(d, 1);
-    free(d);
+    bufpool_free(d, sizeof(*d));
 }
 
 size_t dict_size(const dict *d) {
@@ -172,7 +174,7 @@ int dict_add(dict *d, void *key, void *val) {
 
     dictTable *t = (d->rehash_idx != -1) ? &d->ht[1] : &d->ht[0];
     size_t idx   = d->type->hash(key) & t->size_mask;
-    dictEntry *e = malloc(sizeof(*e));
+    dictEntry *e = bufpool_alloc(sizeof(*e));
     if (!e) return -1;
     e->key = d->type->key_dup ? d->type->key_dup(key) : key;
     e->v.val = d->type->val_dup ? d->type->val_dup(val) : val;
@@ -205,7 +207,7 @@ int dict_delete(dict *d, const void *key) {
                 else       tb->buckets[idx] = e->next;
                 if (d->type->key_free) d->type->key_free(e->key);
                 if (d->type->val_free) d->type->val_free(e->v.val);
-                free(e);
+                bufpool_free(e, sizeof(*e));
                 tb->used--;
                 return 0;
             }
@@ -222,11 +224,13 @@ int dict_delete(dict *d, const void *key) {
 /* ------------------------------------------------------------------ */
 
 dictIterator *dict_iter_new(dict *d) {
-    dictIterator *it = calloc(1, sizeof(*it));
+    dictIterator *it = bufpool_alloc(sizeof(*it));
     if (!it) return NULL;
-    it->d     = d;
-    it->table = 0;
-    it->idx   = -1;
+    it->d          = d;
+    it->table      = 0;
+    it->idx        = -1;
+    it->entry      = NULL;
+    it->next_entry = NULL;
     d->iterators++;
     return it;
 }
@@ -258,5 +262,5 @@ dictEntry *dict_iter_next(dictIterator *it) {
 
 void dict_iter_free(dictIterator *it) {
     it->d->iterators--;
-    free(it);
+    bufpool_free(it, sizeof(*it));
 }

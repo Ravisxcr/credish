@@ -1,11 +1,12 @@
 #include "sds.h"
+#include "bufpool.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
 
 static sds sds_alloc(size_t len, size_t alloc) {
-    sdshdr *hdr = malloc(sizeof(sdshdr) + alloc + 1);
+    sdshdr *hdr = bufpool_alloc(sizeof(sdshdr) + alloc + 1);
     if (!hdr) return NULL;
     hdr->len   = (uint32_t)len;
     hdr->alloc = (uint32_t)alloc;
@@ -34,7 +35,9 @@ sds sds_dup(const sds s) {
 }
 
 void sds_free(sds s) {
-    if (s) free(SDS_HDR(s));
+    if (!s) return;
+    sdshdr *hdr = SDS_HDR(s);
+    bufpool_free(hdr, sizeof(sdshdr) + hdr->alloc + 1);
 }
 
 void sds_clear(sds s) {
@@ -47,12 +50,14 @@ sds sds_grow(sds s, size_t addlen) {
     size_t cur_alloc = hdr->alloc;
     size_t needed    = hdr->len + addlen;
     if (cur_alloc >= needed) return s;
-    /* Double until sufficient */
     size_t new_alloc = cur_alloc ? cur_alloc : 1;
     while (new_alloc < needed) new_alloc *= 2;
-    sdshdr *new_hdr = realloc(hdr, sizeof(sdshdr) + new_alloc + 1);
+    /* Can't realloc a pool-owned slab: alloc new, copy, free old. */
+    sdshdr *new_hdr = bufpool_alloc(sizeof(sdshdr) + new_alloc + 1);
     if (!new_hdr) return NULL;
+    memcpy(new_hdr, hdr, sizeof(sdshdr) + hdr->len + 1);
     new_hdr->alloc = (uint32_t)new_alloc;
+    bufpool_free(hdr, sizeof(sdshdr) + cur_alloc + 1);
     return new_hdr->buf;
 }
 

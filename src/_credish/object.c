@@ -1,4 +1,5 @@
 #include "object.h"
+#include "bufpool.h"
 #include "sds.h"
 #include "dict.h"
 #include "adlist.h"
@@ -7,7 +8,7 @@
 #include <stdio.h>
 
 credishObject *obj_create_string(const char *data, int len) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_STRING;
     o->ptr  = sds_newlen(data, (size_t)len);
@@ -15,10 +16,9 @@ credishObject *obj_create_string(const char *data, int len) {
 }
 
 credishObject *obj_create_string_int(int64_t val) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_STRING;
-    /* Store small ints as formatted sds */
     char buf[22];
     int n = snprintf(buf, sizeof(buf), "%lld", (long long)val);
     o->ptr = sds_newlen(buf, (size_t)n);
@@ -26,7 +26,7 @@ credishObject *obj_create_string_int(int64_t val) {
 }
 
 credishObject *obj_create_list(void) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_LIST;
     o->ptr  = adlist_create();
@@ -44,7 +44,7 @@ static dictType hash_dict_type = {
 };
 
 credishObject *obj_create_hash(void) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_HASH;
     o->ptr  = dict_create(&hash_dict_type);
@@ -62,7 +62,7 @@ static dictType set_dict_type = {
 };
 
 credishObject *obj_create_set(void) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_SET;
     o->ptr  = dict_create(&set_dict_type);
@@ -75,9 +75,9 @@ typedef struct zset {
 } zset;
 
 /* dictType for zset score dict: SDS keys, double* values */
-static void zset_val_free(void *v) { free(v); }
+static void zset_val_free(void *v) { bufpool_free(v, sizeof(double)); }
 static void *zset_val_dup(void *v) {
-    double *d = malloc(sizeof(double));
+    double *d = bufpool_alloc(sizeof(double));
     if (d) *d = *(double *)v;
     return d;
 }
@@ -91,10 +91,10 @@ static dictType zset_dict_type = {
 };
 
 credishObject *obj_create_zset(void) {
-    credishObject *o = malloc(sizeof(*o));
+    credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
-    zset *zs = malloc(sizeof(zset));
-    if (!zs) { free(o); return NULL; }
+    zset *zs = bufpool_alloc(sizeof(zset));
+    if (!zs) { bufpool_free(o, sizeof(*o)); return NULL; }
     zs->dict = dict_create(&zset_dict_type);
     zs->zsl  = zsl_create();
     o->type  = OBJ_ZSET;
@@ -121,11 +121,11 @@ void obj_free(credishObject *o) {
         zset *zs = (zset *)o->ptr;
         dict_free(zs->dict);
         zsl_free(zs->zsl);
-        free(zs);
+        bufpool_free(zs, sizeof(zset));
         break;
     }
     }
-    free(o);
+    bufpool_free(o, sizeof(*o));
 }
 
 int obj_is_string(const credishObject *o) {
