@@ -228,6 +228,82 @@ def stress_concurrent_counters(client: CredishClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Persistence roundtrip
+# ---------------------------------------------------------------------------
+
+
+def stress_persistence_roundtrip(data_dir: str, mode: str) -> None:
+    """
+    Phase 1 — open with persistence=mode, write known sentinel keys plus
+    concurrent counter increments, then close (flushing to disk).
+    Phase 2 — reopen the same data_dir and verify every written value
+    survived the restart intact.
+    """
+    NTHREADS = 8
+    OPS_PER_THREAD = 300
+    N_SENTINEL = 50
+
+    # --- Phase 1: write ---
+    with CredishClient(
+        data_dir=data_dir,
+        persistence=mode,
+        aof_fsync="always",   # guarantee every op is durable for AOF modes
+    ) as client:
+        for i in range(N_SENTINEL):
+            client.set(f"ps:str:{i}", f"sentinel-{i}")
+        client.set("ps:counter", "0")
+        for i in range(10):
+            client.rpush("ps:list", f"elem-{i}")
+
+        def noisy(tid: int) -> None:
+            for j in range(OPS_PER_THREAD):
+                client.incrby("ps:counter", 1)
+                client.set(f"ps:noise:{tid}:{j % 20}", "z" * 128)
+
+        threads = [threading.Thread(target=noisy, args=(i,)) for i in range(NTHREADS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        pre_close_counter = int(client.get("ps:counter"))
+        if mode in ("rdb", "hybrid"):
+            client.save()   # force snapshot before close
+
+    # --- Phase 2: recover and verify ---
+    t0 = time.perf_counter()
+    with CredishClient(data_dir=data_dir, persistence=mode) as client:
+        recovery_ms = (time.perf_counter() - t0) * 1_000
+
+        errs = []
+
+        for i in range(N_SENTINEL):
+            got = client.get(f"ps:str:{i}")
+            expected = f"sentinel-{i}".encode()
+            if got != expected:
+                errs.append(f"str {i}: expected {expected!r}, got {got!r}")
+
+        recovered_counter = int(client.get("ps:counter") or b"0")
+        if recovered_counter != pre_close_counter:
+            errs.append(
+                f"counter: expected {pre_close_counter}, got {recovered_counter}"
+            )
+
+        list_len = client.llen("ps:list")
+        if list_len != 10:
+            errs.append(f"list len: expected 10, got {list_len}")
+
+    status = "OK" if not errs else f"ERRORS({len(errs)})"
+    label = f"persist roundtrip ({mode})"
+    print(
+        f"  {label:<28s}  recovery={recovery_ms:.1f}ms  "
+        f"counter={recovered_counter}/{pre_close_counter}  [{status}]"
+    )
+    for e in errs[:3]:
+        print(f"    ! {e}")
+
+
+# ---------------------------------------------------------------------------
 # Integrity checks
 # ---------------------------------------------------------------------------
 
@@ -304,6 +380,11 @@ def main() -> None:
             check_expiry_semantics(client)
             print("  All integrity checks passed.")
 
+    print("\n--- Persistence roundtrip ---")
+    for mode in ("aof", "rdb", "hybrid"):
+        with tempfile.TemporaryDirectory() as persist_dir:
+            stress_persistence_roundtrip(persist_dir, mode)
+
     print("\nDone.\n")
 
 
@@ -357,6 +438,18 @@ def test_stress_integrity(tmp_path):
         check_string_roundtrip(c)
         check_incrby_atomicity(c)
         check_expiry_semantics(c)
+
+
+def test_stress_persistence_aof(tmp_path):
+    stress_persistence_roundtrip(str(tmp_path), "aof")
+
+
+def test_stress_persistence_rdb(tmp_path):
+    stress_persistence_roundtrip(str(tmp_path), "rdb")
+
+
+def test_stress_persistence_hybrid(tmp_path):
+    stress_persistence_roundtrip(str(tmp_path), "hybrid")
 
 
 if __name__ == "__main__":

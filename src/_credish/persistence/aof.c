@@ -13,6 +13,7 @@
 #include "../db.h"
 #include "../object.h"
 #include "../sds.h"
+#include "../adlist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -109,10 +110,49 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
         dict_free(db->keys);
         dict_free(db->expires);
         /* re-create empty dicts (reuse same dictType from db.c via store_open path) */
+    } else if (strcasecmp(cmd, "INCRBY") == 0) {
+        ARGC_MIN(3);
+        long long val = 0;
+        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        if (o && o->type == OBJ_STRING) {
+            int vlen; char *vptr = obj_string_ptr(o, &vlen);
+            char tmp[64]; int cplen = vlen < 63 ? vlen : 63;
+            memcpy(tmp, vptr, (size_t)cplen); tmp[cplen] = '\0';
+            val = strtoll(tmp, NULL, 10);
+        }
+        val += strtoll(argv[2], NULL, 10);
+        char buf[24]; int blen = snprintf(buf, sizeof(buf), "%lld", val);
+        credishObject *new_o = obj_create_string(buf, blen);
+        if (new_o) db_set(db, argv[1], (int)strlen(argv[1]), new_o, s);
+    } else if (strcasecmp(cmd, "RPUSH") == 0) {
+        ARGC_MIN(3);
+        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        if (!o) {
+            o = obj_create_list();
+            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+        }
+        if (o && o->type == OBJ_LIST) {
+            adlist *l = (adlist *)o->ptr;
+            for (int i = 2; i < argc; i++) {
+                sds v = sds_new(argv[i], strlen(argv[i]));
+                if (v) adlist_push_tail(l, v);
+            }
+        }
+    } else if (strcasecmp(cmd, "LPUSH") == 0) {
+        ARGC_MIN(3);
+        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        if (!o) {
+            o = obj_create_list();
+            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+        }
+        if (o && o->type == OBJ_LIST) {
+            adlist *l = (adlist *)o->ptr;
+            for (int i = 2; i < argc; i++) {
+                sds v = sds_new(argv[i], strlen(argv[i]));
+                if (v) adlist_push_head(l, v);
+            }
+        }
     }
-    /* Additional commands (LPUSH, HSET, etc.) follow the same pattern —
-     * each calls the appropriate obj_create + db_set.
-     * Deferred to Phase 2 implementation. */
 #undef ARGC_MIN
 }
 

@@ -21,7 +21,7 @@ _credish_ext = Extension(
     name="credish._credish",
     sources=_credish_sources,
     include_dirs=["src/_credish"],
-    extra_compile_args=["-O2", "-Wall", "-Wextra", "-std=c11", "-pthread", "-D_POSIX_C_SOURCE=200112L"],
+    extra_compile_args=["-O3", "-Wall", "-Wextra", "-std=c11", "-pthread", "-D_POSIX_C_SOURCE=200112L"],
     extra_link_args=["-pthread"],
 )
 

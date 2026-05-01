@@ -260,30 +260,24 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
     credishObject *o = obj_steal_string(val_sds);
     if (!o) { sds_free(val_sds); return PyErr_NoMemory(); }
 
+    int did_set = 0;
     pthread_rwlock_wrlock(&s->lock);
     credish_db *db = store_select_db(s, 0);
-
-    if (nx && db_lookup(db, key, keylen)) {
-        pthread_rwlock_unlock(&s->lock);
-        obj_free(o);
-        Py_RETURN_NONE;
+    if (!(nx && db_lookup(db, key, keylen)) &&
+        !(xx && !db_lookup(db, key, keylen))) {
+        db_set(db, key, keylen, o, s);
+        if (ex > 0) db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)ex * 1000LL);
+        if (px > 0) db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)px);
+        did_set = 1;
     }
-    if (xx && !db_lookup(db, key, keylen)) {
-        pthread_rwlock_unlock(&s->lock);
-        obj_free(o);
-        Py_RETURN_NONE;
-    }
-
-    db_set(db, key, keylen, o, s);
-    if (ex > 0)  db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)ex * 1000LL);
-    if (px > 0)  db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)px);
     pthread_rwlock_unlock(&s->lock);
 
-    /* AOF */
-    const char *argv_arr[] = { key, (char *)((credishObject *)
-        /* just the sds we already wrote */ o->ptr) };
+    if (!did_set) {
+        obj_free(o);
+        Py_RETURN_NONE;
+    }
+    const char *argv_arr[] = { key, (char *)o->ptr };
     aof_append(s, "SET", 2, argv_arr);
-
     Py_RETURN_TRUE;
 }
 
@@ -460,9 +454,8 @@ static PyObject *py_incrby(PyObject *self, PyObject *args) {
             return NULL;
         }
         int vlen; char *vptr = obj_string_ptr(o, &vlen);
-        char buf[64]; memcpy(buf, vptr, vlen < 63 ? vlen : 63); buf[vlen < 63 ? vlen : 63] = '\0';
-        char *end;
-        val = strtoll(buf, &end, 10);
+        char tmp[64]; memcpy(tmp, vptr, vlen < 63 ? (size_t)vlen : 63); tmp[vlen < 63 ? vlen : 63] = '\0';
+        char *end; val = strtoll(tmp, &end, 10);
         if (*end != '\0') {
             pthread_rwlock_unlock(&s->lock);
             PyErr_SetString(PyExc_ValueError, "not an integer");
@@ -474,6 +467,12 @@ static PyObject *py_incrby(PyObject *self, PyObject *args) {
     credishObject *new_o = obj_create_string(buf, n);
     db_set(db, key, keylen, new_o, s);
     pthread_rwlock_unlock(&s->lock);
+
+    char amount_buf[24];
+    snprintf(amount_buf, sizeof(amount_buf), "%lld", amount);
+    const char *incrby_argv[] = { key, amount_buf };
+    aof_append(s, "INCRBY", 2, incrby_argv);
+
     return PyLong_FromLongLong(val);
 }
 
@@ -509,6 +508,24 @@ static PyObject *py_lpush(PyObject *self, PyObject *args) {
     }
     size_t sz = l->len;
     pthread_rwlock_unlock(&s->lock);
+
+    if (s->aof_fp && n > 0) {
+        const char **aof_argv = malloc((size_t)(1 + n) * sizeof(char *));
+        sds *tmp_sdses = malloc((size_t)n * sizeof(sds));
+        if (aof_argv && tmp_sdses) {
+            aof_argv[0] = key;
+            Py_ssize_t cnt = 0;
+            for (Py_ssize_t i = 0; i < n; i++) {
+                sds v = pyobj_to_sds(PyList_GET_ITEM(vals_list, i));
+                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; cnt++; }
+            }
+            if (cnt > 0) aof_append(s, "LPUSH", (int)(1 + cnt), aof_argv);
+            for (Py_ssize_t i = 0; i < cnt; i++) sds_free(tmp_sdses[i]);
+        }
+        free(aof_argv);
+        free(tmp_sdses);
+    }
+
     return PyLong_FromSsize_t((Py_ssize_t)sz);
 }
 
@@ -540,6 +557,24 @@ static PyObject *py_rpush(PyObject *self, PyObject *args) {
     }
     size_t sz = l->len;
     pthread_rwlock_unlock(&s->lock);
+
+    if (s->aof_fp && n > 0) {
+        const char **aof_argv = malloc((size_t)(1 + n) * sizeof(char *));
+        sds *tmp_sdses = malloc((size_t)n * sizeof(sds));
+        if (aof_argv && tmp_sdses) {
+            aof_argv[0] = key;
+            Py_ssize_t cnt = 0;
+            for (Py_ssize_t i = 0; i < n; i++) {
+                sds v = pyobj_to_sds(PyList_GET_ITEM(vals_list, i));
+                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; cnt++; }
+            }
+            if (cnt > 0) aof_append(s, "RPUSH", (int)(1 + cnt), aof_argv);
+            for (Py_ssize_t i = 0; i < cnt; i++) sds_free(tmp_sdses[i]);
+        }
+        free(aof_argv);
+        free(tmp_sdses);
+    }
+
     return PyLong_FromSsize_t((Py_ssize_t)sz);
 }
 
