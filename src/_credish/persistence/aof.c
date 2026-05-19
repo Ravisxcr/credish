@@ -14,9 +14,12 @@
 #include "../object.h"
 #include "../sds.h"
 #include "../adlist.h"
+#include "../dict.h"
+#include "../skiplist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -150,6 +153,43 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
             for (int i = 2; i < argc; i++) {
                 sds v = sds_new(argv[i], strlen(argv[i]));
                 if (v) adlist_push_head(l, v);
+            }
+        }
+    } else if (strcasecmp(cmd, "ZADD") == 0) {
+        ARGC_MIN(4);
+        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        if (!o) {
+            o = obj_create_zset();
+            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+        }
+        if (o && o->type == OBJ_ZSET) {
+            zset *zs = (zset *)o->ptr;
+            for (int i = 2; i + 1 < argc; i += 2) {
+                double score = strtod(argv[i], NULL);
+                sds member = sds_new(argv[i + 1], strlen(argv[i + 1]));
+                if (!member) continue;
+                double *oldp = dict_fetch_value(zs->dict, member);
+                if (oldp) zsl_delete(zs->zsl, *oldp, member);
+                dict_replace(zs->dict, member, &score);
+                zsl_insert(zs->zsl, score, sds_dup(member));
+                sds_free(member);
+            }
+        }
+    } else if (strcasecmp(cmd, "ZREM") == 0) {
+        ARGC_MIN(3);
+        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        if (o && o->type == OBJ_ZSET) {
+            zset *zs = (zset *)o->ptr;
+            for (int i = 2; i < argc; i++) {
+                sds member = sds_new(argv[i], strlen(argv[i]));
+                if (!member) continue;
+                double *score = dict_fetch_value(zs->dict, member);
+                if (score) {
+                    double old = *score;
+                    zsl_delete(zs->zsl, old, member);
+                    dict_delete(zs->dict, member);
+                }
+                sds_free(member);
             }
         }
     }

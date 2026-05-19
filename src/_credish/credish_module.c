@@ -13,6 +13,8 @@
 #include "object.h"
 #include "sds.h"
 #include "adlist.h"
+#include "dict.h"
+#include "sorted_set.h"
 #include "server.h"
 #include "persistence/rdb.h"
 #include <string.h>
@@ -39,10 +41,14 @@ static void store_capsule_destructor(PyObject *cap) {
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-static credish_store *get_store(PyObject *handle) {
+credish_store *credish_get_store(PyObject *handle) {
     credish_store *s = PyCapsule_GetPointer(handle, CAPSULE_NAME);
     if (!s || s == (credish_store *)&g_closed_sentinel) return NULL;
     return s;
+}
+
+static credish_store *get_store(PyObject *handle) {
+    return credish_get_store(handle);
 }
 
 /* Decode a Python str/bytes arg to (char*, int) */
@@ -655,7 +661,17 @@ static PyMethodDef credish_methods[] = {
     {"rpush",    py_rpush,               METH_VARARGS,               NULL},
     {"lrange",   py_lrange,              METH_VARARGS,               NULL},
     {"llen",     py_llen,                METH_VARARGS,               NULL},
-    /* Remaining commands (incr/decr, hset/hget, sadd, zadd, …)
+    {"zadd",     (PyCFunction)py_zadd,   METH_VARARGS|METH_KEYWORDS, NULL},
+    {"zrange",   (PyCFunction)py_zrange, METH_VARARGS|METH_KEYWORDS, NULL},
+    {"zrevrange",(PyCFunction)py_zrevrange, METH_VARARGS|METH_KEYWORDS, NULL},
+    {"zrank",    py_zrank,               METH_VARARGS,               NULL},
+    {"zrevrank", py_zrevrank,            METH_VARARGS,               NULL},
+    {"zscore",   py_zscore,              METH_VARARGS,               NULL},
+    {"zrem",     py_zrem,                METH_VARARGS,               NULL},
+    {"zcard",    py_zcard,               METH_VARARGS,               NULL},
+    {"zrangebyscore", (PyCFunction)py_zrangebyscore, METH_VARARGS|METH_KEYWORDS, NULL},
+    {"zincrby",  py_zincrby,             METH_VARARGS,               NULL},
+    /* Remaining commands (incr/decr, hset/hget, sadd, …)
      * follow the same pattern — stubs to be filled in Phase 2. */
     {NULL, NULL, 0, NULL}
 };

@@ -51,6 +51,12 @@ static int node_gt(double s1, sds m1, double s2, sds m2) {
     return sds_cmp(m1, m2) > 0;
 }
 
+/* Returns 1 if (score1,member1) < (score2,member2) */
+static int node_lt(double s1, sds m1, double s2, sds m2) {
+    if (s1 != s2) return s1 < s2;
+    return sds_cmp(m1, m2) < 0;
+}
+
 zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL];
     unsigned int   rank[ZSKIPLIST_MAXLEVEL];
@@ -59,9 +65,9 @@ zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member) {
     for (int i = zsl->level - 1; i >= 0; i--) {
         rank[i] = i == zsl->level - 1 ? 0 : rank[i + 1];
         while (x->level[i].forward &&
-               !node_gt(score, member,
-                        x->level[i].forward->score,
-                        x->level[i].forward->member)) {
+               node_lt(x->level[i].forward->score,
+                       x->level[i].forward->member,
+                       score, member)) {
             rank[i] += x->level[i].span;
             x = x->level[i].forward;
         }
@@ -100,8 +106,8 @@ int zsl_delete(zskiplist *zsl, double score, sds member) {
     zskiplistNode *x = zsl->header;
     for (int i = zsl->level - 1; i >= 0; i--) {
         while (x->level[i].forward &&
-               !node_gt(x->level[i].forward->score,
-                        x->level[i].forward->member, score, member))
+               node_lt(x->level[i].forward->score,
+                       x->level[i].forward->member, score, member))
             x = x->level[i].forward;
         update[i] = x;
     }
@@ -132,9 +138,9 @@ unsigned long zsl_get_rank(zskiplist *zsl, double score, sds member) {
     unsigned long rank = 0;
     for (int i = zsl->level - 1; i >= 0; i--) {
         while (x->level[i].forward &&
-               !node_gt(score, member,
-                        x->level[i].forward->score,
-                        x->level[i].forward->member)) {
+               !node_gt(x->level[i].forward->score,
+                        x->level[i].forward->member,
+                        score, member)) {
             rank += x->level[i].span;
             x = x->level[i].forward;
         }

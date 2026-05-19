@@ -16,6 +16,11 @@ struct adlist;
 struct dict;
 struct zskiplist;
 
+typedef struct zset {
+    struct dict      *dict;    /* member -> score */
+    struct zskiplist *zsl;     /* score/member ordered view */
+} zset;
+
 typedef struct credishObject {
     int   type;
     union {

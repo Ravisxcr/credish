@@ -26,6 +26,7 @@
 #include "../sds.h"
 #include "../object.h"
 #include "../adlist.h"
+#include "../skiplist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,7 +149,6 @@ static void save_set(FILE *f, credishObject *o) {
 }
 
 static void save_zset(FILE *f, credishObject *o) {
-    typedef struct { dict *dict; struct zskiplist *zsl; } zset;
     zset *zs = (zset *)o->ptr;
     w_u32(f, (uint32_t)dict_size(zs->dict));
     dictIterator *it = dict_iter_new(zs->dict);
@@ -332,7 +332,6 @@ int rdb_load(credish_store *s) {
             case OBJ_ZSET: {
                 o = obj_create_zset();
                 uint32_t n = r_u32(f);
-                typedef struct { dict *dict; struct zskiplist *zsl; } zset;
                 zset *zs = (zset *)o->ptr;
                 for (uint32_t j = 0; j < n; j++) {
                     sds member = r_sds(f);

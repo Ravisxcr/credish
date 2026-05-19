@@ -77,11 +77,6 @@ credishObject *obj_create_set(void) {
     return o;
 }
 
-typedef struct zset {
-    dict       *dict;    /* member -> score */
-    zskiplist  *zsl;
-} zset;
-
 /* dictType for zset score dict: SDS keys, double* values */
 static void zset_val_free(void *v) { bufpool_free(v, sizeof(double)); }
 static void *zset_val_dup(void *v) {
