@@ -16,6 +16,10 @@ are planned in the Python API but are not all backed by C extension exports yet.
   sorted set commands.
 - [Persistence and Expiry](persistence-and-expiry.md): persistence modes, RDB,
   AOF, hybrid mode, TTL, and expiry behavior.
+- [Internals](internals.md): C extension architecture, buffer pool pages,
+  object model, DB layout, expiry, persistence, and threading.
+- [C Source Guide](codebase/README.md): file-by-file explanations of every C
+  implementation module.
 - [Errors and Limitations](errors-and-limitations.md): exported exceptions,
   common failures, planned command groups, and compatibility limits.
 - [Development](development.md): repository layout, testing, and the workflow for
