@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "setuptools-scm>=8"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "credish"
-dynamic = ["version"]
+version = "0.0.1"
 description = "Redis-compatible in-process cache as a Python C extension"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,8 +16,6 @@ dev = ["pytest", "pytest-timeout"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["credish*"]
-
-[tool.setuptools_scm]
 
 [tool.pytest.ini_options]
 addopts = "-s"
