@@ -74,6 +74,21 @@ def worker_strings(client: CredishClient, n: int, tid: int) -> WorkerResult:
     return r
 
 
+def worker_ping(client: CredishClient, n: int, tid: int) -> WorkerResult:
+    r = WorkerResult()
+    for i in range(n):
+        t0 = time.perf_counter()
+        try:
+            pong = client.ping()
+            if pong != "PONG":
+                raise AssertionError(f"expected PONG, got {pong!r}")
+            r.ops += 1
+        except Exception as exc:
+            r.errors.append(f"ping tid={tid} i={i}: {exc}")
+        r.latencies_ms.append((time.perf_counter() - t0) * 1_000)
+    return r
+
+
 def worker_lists(client: CredishClient, n: int, tid: int) -> WorkerResult:
     r = WorkerResult()
     for i in range(n):
@@ -363,6 +378,7 @@ def main() -> None:
         with CredishClient(data_dir=tmp, persistence="none") as client:
 
             print("--- Concurrent data-type workers ---")
+            run_scenario("ping",           client, worker_ping,    THREADS, OPS_PER_THREAD)
             run_scenario("strings",        client, worker_strings, THREADS, OPS_PER_THREAD)
             run_scenario("lists",          client, worker_lists,   THREADS, OPS_PER_THREAD)
             run_scenario("expiry/TTL",     client, worker_expiry,  THREADS, OPS_PER_THREAD)
@@ -400,6 +416,11 @@ def _client(tmp_path):
 def test_stress_strings(tmp_path):
     with _client(tmp_path) as c:
         run_scenario("strings", c, worker_strings, THREADS, OPS_PER_THREAD)
+
+
+def test_stress_ping(tmp_path):
+    with _client(tmp_path) as c:
+        run_scenario("ping", c, worker_ping, THREADS, OPS_PER_THREAD)
 
 
 def test_stress_lists(tmp_path):

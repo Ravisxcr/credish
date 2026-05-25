@@ -24,6 +24,9 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#define AOF_WRITE_BUFFER_SIZE (1024 * 1024)
+#define AOF_REPLAY_BUFFER_SIZE (1024 * 1024)
+
 static void aof_path(char *buf, size_t len, const char *data_dir) {
     snprintf(buf, len, "%s/credish.aof", data_dir);
 }
@@ -32,6 +35,11 @@ int aof_open(credish_store *s) {
     char path[600];
     aof_path(path, sizeof(path), s->cfg.data_dir);
     s->aof_fp = fopen(path, "ab");
+    if (s->aof_fp) {
+        s->aof_buf = malloc(AOF_WRITE_BUFFER_SIZE);
+        if (s->aof_buf)
+            setvbuf(s->aof_fp, s->aof_buf, _IOFBF, AOF_WRITE_BUFFER_SIZE);
+    }
     return s->aof_fp ? 0 : -1;
 }
 
@@ -205,9 +213,12 @@ int aof_load(credish_store *s) {
     aof_path(path, sizeof(path), s->cfg.data_dir);
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
+    char *replay_buf = malloc(AOF_REPLAY_BUFFER_SIZE);
+    if (replay_buf)
+        setvbuf(f, replay_buf, _IOFBF, AOF_REPLAY_BUFFER_SIZE);
 
     int db_id = 0;
-    char line[256];
+    char line[1024];
     while (fgets(line, sizeof(line), f)) {
         if (line[0] != '*') continue;
         int n = atoi(line + 1);
@@ -232,6 +243,7 @@ int aof_load(credish_store *s) {
         if (!ok) break;
     }
     fclose(f);
+    free(replay_buf);
     return 0;
 }
 
