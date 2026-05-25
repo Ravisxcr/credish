@@ -32,7 +32,7 @@ from credish import CredishClient
 
 THREADS = 16
 OPS_PER_THREAD = 2_000
-KEY_SPACE = 500
+KEY_SPACE = 5000
 LARGE_VALUE_SIZE = 4_096
 
 random.seed(42)

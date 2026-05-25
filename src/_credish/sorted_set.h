@@ -6,6 +6,7 @@
 #include "db.h"
 
 credish_store *credish_get_store(PyObject *handle);
+credish_db *credish_get_db(PyObject *handle, credish_store *s);
 
 PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_zrange(PyObject *self, PyObject *args, PyObject *kw);

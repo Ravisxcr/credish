@@ -40,17 +40,41 @@ class CredishClient:
         save_interval: int = 300,
         aof_fsync: str = "everysec",
         db: int = 0,
+        _store: Any = None,
+        _owns_store: bool = True,
     ) -> None:
-        self._db = _credish.open(
-            data_dir=data_dir,
-            persistence=persistence,
-            save_interval=save_interval,
-            aof_fsync=aof_fsync,
-            db=db,
-        )
+        self._db_index = self._validate_db(db)
+        self._owns_store = _owns_store
+        self._closed = False
+        if _store is None:
+            self._store = _credish.open(
+                data_dir=data_dir,
+                persistence=persistence,
+                save_interval=save_interval,
+                aof_fsync=aof_fsync,
+                db=db,
+            )
+        else:
+            self._store = _store
+        self._refresh_handle()
+
+    @staticmethod
+    def _validate_db(db: int) -> int:
+        if not isinstance(db, int):
+            raise DataError("db must be an integer")
+        if db < 0 or db > 15:
+            raise ValueError("db index out of range")
+        return db
+
+    def _refresh_handle(self) -> None:
+        self._db = self._store if self._db_index == 0 else (self._store, self._db_index)
 
     def close(self) -> None:
-        _credish.close(self._db)
+        if self._closed:
+            return
+        if self._owns_store:
+            _credish.close(self._store)
+        self._closed = True
 
     def __enter__(self) -> "CredishClient":
         return self
@@ -80,7 +104,28 @@ class CredishClient:
         return _credish.bgsave(self._db)
 
     def select(self, db: int) -> bool:
-        return _credish.select(self._db, db)
+        db = self._validate_db(db)
+        result = _credish.select(self._db, db)
+        self._db_index = db
+        self._refresh_handle()
+        return result
+
+    def session(self, db: Optional[int] = None) -> "CredishClient":
+        """Return another client session sharing this store.
+
+        Each session has its own selected logical database, so this mirrors
+        opening multiple redis-py clients without creating another Credish
+        store in memory.
+        """
+        return CredishClient(
+            db=self._db_index if db is None else db,
+            _store=self._store,
+            _owns_store=False,
+        )
+
+    def client(self, db: Optional[int] = None) -> "CredishClient":
+        """redis-py-style alias for creating a shared session."""
+        return self.session(db=db)
 
     # ------------------------------------------------------------------
     # Key / expiry

@@ -47,3 +47,9 @@ upload-test: check
 
 install-dev:
 	$(PIP) install -e '.[dev]'
+
+benchmark:
+	$(PYTHON) benchmarks/bench.py
+
+test:
+	$(PYTHON) -m pytest tests

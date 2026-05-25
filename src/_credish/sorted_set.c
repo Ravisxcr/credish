@@ -158,7 +158,7 @@ PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw) {
 
     int result = 0;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_zset();
@@ -212,7 +212,7 @@ static PyObject *py_zrange_common(PyObject *self, PyObject *args, PyObject *kw, 
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
     pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     if (!o) {
         pthread_rwlock_unlock(&s->lock);
@@ -270,7 +270,7 @@ static PyObject *py_zrank_common(PyObject *self, PyObject *args, int reverse) {
     if (!member) return NULL;
 
     pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result = Py_None;
     Py_INCREF(result);
@@ -316,7 +316,7 @@ PyObject *py_zscore(PyObject *self, PyObject *args) {
     if (!member) return NULL;
 
     pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result = Py_None;
     Py_INCREF(result);
@@ -366,7 +366,7 @@ PyObject *py_zrem(PyObject *self, PyObject *args) {
 
     int removed = 0;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (o) {
         if (o->type != OBJ_ZSET) {
@@ -403,7 +403,7 @@ PyObject *py_zcard(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     size_t sz = 0;
     if (o) {
@@ -434,7 +434,7 @@ PyObject *py_zrangebyscore(PyObject *self, PyObject *args, PyObject *kw) {
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
     pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     if (!o) {
         pthread_rwlock_unlock(&s->lock);
@@ -474,7 +474,7 @@ PyObject *py_zincrby(PyObject *self, PyObject *args) {
 
     double new_score;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_zset();
