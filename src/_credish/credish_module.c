@@ -43,8 +43,29 @@ static void store_capsule_destructor(PyObject *cap) {
 
 credish_store *credish_get_store(PyObject *handle) {
     credish_store *s = PyCapsule_GetPointer(handle, CAPSULE_NAME);
+    if (!s && PyTuple_Check(handle) && PyTuple_GET_SIZE(handle) == 2) {
+        PyErr_Clear();
+        s = PyCapsule_GetPointer(PyTuple_GET_ITEM(handle, 0), CAPSULE_NAME);
+    }
     if (!s || s == (credish_store *)&g_closed_sentinel) return NULL;
     return s;
+}
+
+static int get_db_id(PyObject *handle) {
+    if (PyTuple_Check(handle) && PyTuple_GET_SIZE(handle) == 2) {
+        long db_id = PyLong_AsLong(PyTuple_GET_ITEM(handle, 1));
+        if (PyErr_Occurred()) return -1;
+        return (int)db_id;
+    }
+    return 0;
+}
+
+credish_db *credish_get_db(PyObject *handle, credish_store *s) {
+    if (!PyTuple_Check(handle)) return &s->dbs[0];
+    int db_id = get_db_id(handle);
+    credish_db *db = store_select_db(s, db_id);
+    if (!db) PyErr_SetString(PyExc_ValueError, "db index out of range");
+    return db;
 }
 
 static credish_store *get_store(PyObject *handle) {
@@ -176,9 +197,10 @@ static PyObject *py_flushdb(PyObject *self, PyObject *args) {
 
 static PyObject *py_dbsize(PyObject *self, PyObject *args) {
     (void)self;
-    PyObject *handle; int db_id = 0;
+    PyObject *handle; int db_id = -1;
     if (!PyArg_ParseTuple(args, "O|i", &handle, &db_id)) return NULL;
     credish_store *s = get_store(handle); if (!s) return NULL;
+    if (db_id < 0) db_id = get_db_id(handle);
     credish_db *db = store_select_db(s, db_id); if (!db) return PyLong_FromLong(0);
     pthread_rwlock_rdlock(&s->lock);
     size_t sz = dict_size(db->keys);
@@ -231,8 +253,8 @@ static PyObject *py_get(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result;
     if (!o) { result = Py_None; Py_INCREF(result); }
@@ -268,7 +290,7 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
 
     int did_set = 0;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     if (!(nx && db_lookup(db, key, keylen)) &&
         !(xx && !db_lookup(db, key, keylen))) {
         db_set(db, key, keylen, o, s);
@@ -297,7 +319,7 @@ static PyObject *py_delete(PyObject *self, PyObject *args) {
     Py_ssize_t n = PyList_GET_SIZE(keys_list);
     int deleted = 0;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *ko = PyList_GET_ITEM(keys_list, i);
         char *key; int keylen;
@@ -316,8 +338,8 @@ static PyObject *py_exists(PyObject *self, PyObject *args) {
     if (!PyList_Check(keys_list)) { PyErr_SetString(PyExc_TypeError,"expected list"); return NULL; }
     Py_ssize_t n = PyList_GET_SIZE(keys_list);
     int count = 0;
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *ko = PyList_GET_ITEM(keys_list, i);
         char *key; int keylen;
@@ -336,7 +358,7 @@ static PyObject *py_expire(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     int found = db_lookup(db, key, keylen) != NULL;
     if (found) db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)seconds * 1000LL);
     pthread_rwlock_unlock(&s->lock);
@@ -351,7 +373,7 @@ static PyObject *py_pexpire(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     int found = db_lookup(db, key, keylen) != NULL;
     if (found) db_set_expire(db, key, keylen, now_ms_mod() + (int64_t)ms);
     pthread_rwlock_unlock(&s->lock);
@@ -366,7 +388,7 @@ static PyObject *py_persist(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     int64_t dl = db_get_expire(db, key, keylen);
     if (dl >= 0) db_remove_expire(db, key, keylen);
     pthread_rwlock_unlock(&s->lock);
@@ -380,8 +402,8 @@ static PyObject *py_ttl(PyObject *self, PyObject *args) {
     credish_store *s = get_store(handle); if (!s) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     int64_t result;
     if (!o) { result = -2; }
@@ -400,8 +422,8 @@ static PyObject *py_pttl(PyObject *self, PyObject *args) {
     credish_store *s = get_store(handle); if (!s) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     int64_t result;
     if (!o) { result = -2; }
@@ -420,8 +442,8 @@ static PyObject *py_type(PyObject *self, PyObject *args) {
     credish_store *s = get_store(handle); if (!s) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     const char *tname = "none";
     if (o) {
@@ -450,7 +472,7 @@ static PyObject *py_incrby(PyObject *self, PyObject *args) {
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     long long val = 0;
     if (o) {
@@ -496,7 +518,7 @@ static PyObject *py_lpush(PyObject *self, PyObject *args) {
     if (!PyList_Check(vals_list)) { PyErr_SetString(PyExc_TypeError,"expected list"); return NULL; }
 
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_list();
@@ -545,7 +567,7 @@ static PyObject *py_rpush(PyObject *self, PyObject *args) {
     if (!PyList_Check(vals_list)) { PyErr_SetString(PyExc_TypeError,"expected list"); return NULL; }
 
     pthread_rwlock_wrlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_list();
@@ -592,8 +614,8 @@ static PyObject *py_lrange(PyObject *self, PyObject *args) {
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result = PyList_New(0);
     if (o && o->type == OBJ_LIST) {
@@ -624,8 +646,8 @@ static PyObject *py_llen(PyObject *self, PyObject *args) {
     credish_store *s = get_store(handle); if (!s) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    pthread_rwlock_rdlock(&s->lock);
-    credish_db *db = store_select_db(s, 0);
+    pthread_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
     credishObject *o = db_lookup(db, key, keylen);
     size_t sz = 0;
     if (o && o->type == OBJ_LIST) sz = ((adlist *)o->ptr)->len;

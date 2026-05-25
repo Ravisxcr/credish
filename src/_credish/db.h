@@ -23,6 +23,7 @@ typedef struct credish_store {
 
     /* AOF */
     FILE   *aof_fp;
+    char   *aof_buf;
     int64_t aof_seq;
 
     /* RDB */
