@@ -112,8 +112,10 @@ void bufpool_destroy(void) {
             free(pg);
             pg = nx;
         }
-        sl->pages = sl->free = NULL;
-        sl->bump  = sl->end  = NULL;
+        sl->pages = NULL;
+        sl->free  = NULL;
+        sl->bump  = NULL;
+        sl->end   = NULL;
         credish_mutex_unlock(&sl->lock);
         credish_mutex_destroy(&sl->lock);
     }
