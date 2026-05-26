@@ -4,7 +4,7 @@
 #include "dict.h"
 #include "object.h"
 #include "server.h"
-#include <pthread.h>
+#include "platform.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -19,7 +19,7 @@ typedef struct credish_db {
 typedef struct credish_store {
     credish_db      dbs[CREDISH_DB_COUNT];
     credish_config  cfg;
-    pthread_rwlock_t lock;
+    credish_rwlock_t lock;
 
     /* AOF */
     FILE   *aof_fp;
@@ -30,7 +30,8 @@ typedef struct credish_store {
     int64_t last_save_time;  /* unix seconds */
 
     /* Active expiry sweep thread */
-    pthread_t sweep_thread;
+    credish_thread_t sweep_thread;
+    int       sweep_thread_started;
     int       sweep_running;
 } credish_store;
 

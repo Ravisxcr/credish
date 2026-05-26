@@ -32,8 +32,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
-#include <pthread.h>
-#include <unistd.h>
+#include "platform.h"
 
 #define RDB_MAGIC    "CREDISH_RDB\n"
 #define RDB_VERSION  1
@@ -366,13 +365,16 @@ int rdb_load(credish_store *s) {
 
 static void *bgsave_fn(void *arg) {
     credish_store *s = (credish_store *)arg;
-    pthread_rwlock_rdlock(&s->lock);
+    credish_rwlock_rdlock(&s->lock);
     rdb_save(s);
-    pthread_rwlock_unlock(&s->lock);
+    credish_rwlock_rdunlock(&s->lock);
     return NULL;
 }
 
 int rdb_bgsave(credish_store *s) {
-    pthread_t t;
-    return pthread_create(&t, NULL, bgsave_fn, s) == 0 ? 0 : -1;
+    credish_thread_t t;
+    if (credish_thread_create(&t, bgsave_fn, s) != 0)
+        return -1;
+    credish_thread_detach(t);
+    return 0;
 }

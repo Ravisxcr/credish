@@ -19,9 +19,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 
 #define AOF_WRITE_BUFFER_SIZE (1024 * 1024)
@@ -81,47 +78,43 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
 
 #define ARGC_MIN(n) if (argc < (n)) return
 
-    if (strcasecmp(cmd, "SET") == 0) {
+    if (credish_strcasecmp(cmd, "SET") == 0) {
         ARGC_MIN(3);
         credishObject *o = obj_create_string(argv[2], (int)strlen(argv[2]));
         db_set(db, argv[1], (int)strlen(argv[1]), o, s);
         /* optional EX/PX */
         for (int i = 3; i + 1 < argc; i++) {
-            if (strcasecmp(argv[i], "EX") == 0) {
+            if (credish_strcasecmp(argv[i], "EX") == 0) {
                 int64_t sec = atoll(argv[i + 1]);
-                struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
-                int64_t dl = (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL
-                             + sec * 1000LL;
+                int64_t dl = credish_now_ms() + sec * 1000LL;
                 db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
                 i++;
-            } else if (strcasecmp(argv[i], "PX") == 0) {
+            } else if (credish_strcasecmp(argv[i], "PX") == 0) {
                 int64_t ms = atoll(argv[i + 1]);
-                struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
-                int64_t dl = (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL + ms;
+                int64_t dl = credish_now_ms() + ms;
                 db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
                 i++;
             }
         }
-    } else if (strcasecmp(cmd, "DEL") == 0) {
+    } else if (credish_strcasecmp(cmd, "DEL") == 0) {
         for (int i = 1; i < argc; i++)
             db_del(db, argv[i], (int)strlen(argv[i]), s);
-    } else if (strcasecmp(cmd, "EXPIRE") == 0) {
+    } else if (credish_strcasecmp(cmd, "EXPIRE") == 0) {
         ARGC_MIN(3);
         int64_t sec = atoll(argv[2]);
-        struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
-        int64_t dl = (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL + sec * 1000LL;
+        int64_t dl = credish_now_ms() + sec * 1000LL;
         db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
-    } else if (strcasecmp(cmd, "PERSIST") == 0) {
+    } else if (credish_strcasecmp(cmd, "PERSIST") == 0) {
         ARGC_MIN(2);
         db_remove_expire(db, argv[1], (int)strlen(argv[1]));
-    } else if (strcasecmp(cmd, "SELECT") == 0) {
+    } else if (credish_strcasecmp(cmd, "SELECT") == 0) {
         /* no-op during replay: db index tracked in AOF header per-command */
-    } else if (strcasecmp(cmd, "FLUSHDB") == 0) {
+    } else if (credish_strcasecmp(cmd, "FLUSHDB") == 0) {
         /* wipe the current db */
         dict_free(db->keys);
         dict_free(db->expires);
         /* re-create empty dicts (reuse same dictType from db.c via store_open path) */
-    } else if (strcasecmp(cmd, "INCRBY") == 0) {
+    } else if (credish_strcasecmp(cmd, "INCRBY") == 0) {
         ARGC_MIN(3);
         long long val = 0;
         credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
@@ -135,7 +128,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
         char buf[24]; int blen = snprintf(buf, sizeof(buf), "%lld", val);
         credishObject *new_o = obj_create_string(buf, blen);
         if (new_o) db_set(db, argv[1], (int)strlen(argv[1]), new_o, s);
-    } else if (strcasecmp(cmd, "RPUSH") == 0) {
+    } else if (credish_strcasecmp(cmd, "RPUSH") == 0) {
         ARGC_MIN(3);
         credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
         if (!o) {
@@ -149,7 +142,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
                 if (v) adlist_push_tail(l, v);
             }
         }
-    } else if (strcasecmp(cmd, "LPUSH") == 0) {
+    } else if (credish_strcasecmp(cmd, "LPUSH") == 0) {
         ARGC_MIN(3);
         credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
         if (!o) {
@@ -163,7 +156,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
                 if (v) adlist_push_head(l, v);
             }
         }
-    } else if (strcasecmp(cmd, "ZADD") == 0) {
+    } else if (credish_strcasecmp(cmd, "ZADD") == 0) {
         ARGC_MIN(4);
         credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
         if (!o) {
@@ -183,7 +176,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
                 sds_free(member);
             }
         }
-    } else if (strcasecmp(cmd, "ZREM") == 0) {
+    } else if (credish_strcasecmp(cmd, "ZREM") == 0) {
         ARGC_MIN(3);
         credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
         if (o && o->type == OBJ_ZSET) {
@@ -234,7 +227,7 @@ int aof_load(credish_store *s) {
         }
         if (ok) {
             /* The first "argv[0]" is the command; track SELECT for db_id */
-            if (n >= 2 && strcasecmp(argv[0], "SELECT") == 0)
+            if (n >= 2 && credish_strcasecmp(argv[0], "SELECT") == 0)
                 db_id = atoi(argv[1]);
             replay_cmd(s, db_id, n, argv);
         }

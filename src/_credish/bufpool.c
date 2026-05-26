@@ -1,7 +1,7 @@
 #include "bufpool.h"
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
+#include "platform.h"
 
 #define POOL_PAGE_BYTES  4096
 #define POOL_NUM_CLASSES 12
@@ -22,11 +22,11 @@ typedef struct {
     char           *bump;   /* next virgin byte in current page   */
     char           *end;    /* one past last usable byte of page  */
     page           *pages;  /* all allocated pages (for destroy)  */
-    pthread_mutex_t lock;
+    credish_mutex_t lock;
 } slab;
 
 static slab             g_slabs[POOL_NUM_CLASSES];
-static pthread_once_t   g_once = PTHREAD_ONCE_INIT;
+static credish_once_t   g_once = CREDISH_ONCE_INIT;
 
 static void pool_init_once(void) {
     for (int i = 0; i < POOL_NUM_CLASSES; i++) {
@@ -36,12 +36,12 @@ static void pool_init_once(void) {
         sl->bump   = NULL;
         sl->end    = NULL;
         sl->pages  = NULL;
-        pthread_mutex_init(&sl->lock, NULL);
+        credish_mutex_init(&sl->lock);
     }
 }
 
 void bufpool_init(void) {
-    pthread_once(&g_once, pool_init_once);
+    credish_once(&g_once, pool_init_once);
 }
 
 /* Round `size` up to the matching size-class index, or -1 if too large. */
@@ -62,13 +62,13 @@ static int grow_slab(slab *sl) {
 }
 
 void *bufpool_alloc(size_t size) {
-    pthread_once(&g_once, pool_init_once);
+    credish_once(&g_once, pool_init_once);
 
     int idx = sclass_idx(size);
     if (idx < 0) return malloc(size);
 
     slab *sl = &g_slabs[idx];
-    pthread_mutex_lock(&sl->lock);
+    credish_mutex_lock(&sl->lock);
 
     void *p;
     if (sl->free) {
@@ -76,36 +76,36 @@ void *bufpool_alloc(size_t size) {
         sl->free = sl->free->next;
     } else {
         if (sl->bump + sl->sz > sl->end && !grow_slab(sl)) {
-            pthread_mutex_unlock(&sl->lock);
+            credish_mutex_unlock(&sl->lock);
             return NULL;
         }
         p        = sl->bump;
         sl->bump += sl->sz;
     }
 
-    pthread_mutex_unlock(&sl->lock);
+    credish_mutex_unlock(&sl->lock);
     return p;
 }
 
 void bufpool_free(void *ptr, size_t size) {
     if (!ptr) return;
-    pthread_once(&g_once, pool_init_once);
+    credish_once(&g_once, pool_init_once);
 
     int idx = sclass_idx(size);
     if (idx < 0) { free(ptr); return; }
 
     slab *sl  = &g_slabs[idx];
-    pthread_mutex_lock(&sl->lock);
+    credish_mutex_lock(&sl->lock);
     free_slot *s = ptr;
     s->next  = sl->free;
     sl->free = s;
-    pthread_mutex_unlock(&sl->lock);
+    credish_mutex_unlock(&sl->lock);
 }
 
 void bufpool_destroy(void) {
     for (int i = 0; i < POOL_NUM_CLASSES; i++) {
         slab *sl = &g_slabs[i];
-        pthread_mutex_lock(&sl->lock);
+        credish_mutex_lock(&sl->lock);
         page *pg = sl->pages;
         while (pg) {
             page *nx = pg->next;
@@ -114,7 +114,7 @@ void bufpool_destroy(void) {
         }
         sl->pages = sl->free = NULL;
         sl->bump  = sl->end  = NULL;
-        pthread_mutex_unlock(&sl->lock);
-        pthread_mutex_destroy(&sl->lock);
+        credish_mutex_unlock(&sl->lock);
+        credish_mutex_destroy(&sl->lock);
     }
 }

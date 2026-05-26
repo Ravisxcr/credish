@@ -1,5 +1,6 @@
 from setuptools import setup, Extension
 import os
+import sys
 
 _credish_sources = [
     "src/_credish/credish_module.c",
@@ -22,8 +23,12 @@ _credish_ext = Extension(
     name="credish._credish",
     sources=_credish_sources,
     include_dirs=["src/_credish"],
-    extra_compile_args=["-O3", "-Wall", "-Wextra", "-std=c11", "-pthread", "-D_POSIX_C_SOURCE=200112L"],
-    extra_link_args=["-pthread"],
+    extra_compile_args=(
+        ["/O2"]
+        if sys.platform == "win32"
+        else ["-O3", "-Wall", "-Wextra", "-std=c11", "-pthread", "-D_POSIX_C_SOURCE=200112L"]
+    ),
+    extra_link_args=[] if sys.platform == "win32" else ["-pthread"],
 )
 
 setup(ext_modules=[_credish_ext])
