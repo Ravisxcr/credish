@@ -1,5 +1,5 @@
 import pytest
-from credish import CredishClient
+from credish import AOF_FSYNC, CredishClient, PERSISTENCE, PRESISTENCE
 
 
 def test_rdb_roundtrip(tmp_path):
@@ -9,6 +9,31 @@ def test_rdb_roundtrip(tmp_path):
 
     with CredishClient(data_dir=str(tmp_path), persistence="rdb") as c:
         assert c.get("rdb_key") == b"hello"
+
+
+def test_persistence_enum_roundtrip(tmp_path):
+    with CredishClient(data_dir=str(tmp_path), persistence=PERSISTENCE.RDB) as c:
+        c.set("enum_key", "hello")
+        c.save()
+
+    with CredishClient(data_dir=str(tmp_path), persistence=PRESISTENCE.RDB) as c:
+        assert c.get("enum_key") == b"hello"
+
+
+def test_aof_fsync_enum_roundtrip(tmp_path):
+    with CredishClient(
+        data_dir=str(tmp_path),
+        persistence=PERSISTENCE.AOF,
+        aof_fsync=AOF_FSYNC.ALWAYS,
+    ) as c:
+        c.set("enum_aof_key", "world")
+
+    with CredishClient(
+        data_dir=str(tmp_path),
+        persistence=PERSISTENCE.AOF,
+        aof_fsync=AOF_FSYNC.NO,
+    ) as c:
+        assert c.get("enum_aof_key") == b"world"
 
 
 def test_rdb_ignores_and_removes_abandoned_tmp_snapshot(tmp_path):

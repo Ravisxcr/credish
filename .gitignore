@@ -221,3 +221,5 @@ __marimo__/
 .codex/
 wheelhouse/
 MANIFEST.in
+
+main.py
