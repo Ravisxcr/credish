@@ -26,10 +26,10 @@ jobs:
       fail-fast: false
       matrix:
         buildplat:
-          - [ubuntu-22.04, manylinux_x86_64]
+          # - [ubuntu-22.04, manylinux_x86_64]
           # - [ubuntu-22.04-arm, manylinux_aarch64]
           # - [macos-15-intel, macosx_x86_64]
-          - [macos-14, macosx_arm64]
+          # - [macos-14, macosx_arm64]
           - [windows-2022, win_amd64]
         python: ["cp312"]
     steps:
@@ -49,6 +49,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: AMD64
           CIBW_BUILD_FRONTEND: "${{ matrix.buildplat[1] == 'win_amd64' && 'build; args: --no-isolation' || 'build' }}"
           CIBW_BUILD_VERBOSITY: 1
+          CIBW_BEFORE_BUILD_WINDOWS: 'python -m pip install --upgrade "setuptools>=68" wheel'
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
