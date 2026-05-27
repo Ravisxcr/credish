@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-timeout"]
+dev = ["cibuildwheel", "pytest", "pytest-timeout"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -19,3 +19,18 @@ include = ["credish*"]
 
 [tool.pytest.ini_options]
 addopts = "-s"
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-win32 *-musllinux*"
+test-requires = ["pytest", "pytest-timeout"]
+test-command = "pytest {project}/tests/unit"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["auto"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
