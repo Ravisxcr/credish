@@ -2,11 +2,14 @@
 #define CREDISH_PLATFORM_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#include <io.h>
 #include <process.h>
 #include <windows.h>
 #define credish_strcasecmp _stricmp
@@ -117,7 +120,19 @@ static inline void credish_sleep_ms(unsigned int ms) {
     Sleep(ms);
 }
 
+static inline int credish_fsync_file(FILE *f) {
+    if (fflush(f) != 0) return -1;
+    HANDLE h = (HANDLE)_get_osfhandle(_fileno(f));
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    return FlushFileBuffers(h) ? 0 : -1;
+}
+
+static inline void credish_fsync_parent_dir(const char *path) {
+    (void)path;
+}
+
 #else
+#include <fcntl.h>
 #include <pthread.h>
 #include <strings.h>
 #include <unistd.h>
@@ -154,6 +169,26 @@ static inline void credish_sleep_ms(unsigned int ms) {
         .tv_nsec = (long)(ms % 1000U) * 1000000L,
     };
     nanosleep(&interval, NULL);
+}
+
+static inline int credish_fsync_file(FILE *f) {
+    if (fflush(f) != 0) return -1;
+    return fsync(fileno(f));
+}
+
+static inline void credish_fsync_parent_dir(const char *path) {
+    char dir[600];
+    const char *slash = strrchr(path, '/');
+    if (!slash) return;
+    size_t len = (size_t)(slash - path);
+    if (len == 0 || len >= sizeof(dir)) return;
+    memcpy(dir, path, len);
+    dir[len] = '\0';
+    int fd = open(dir, O_RDONLY);
+    if (fd >= 0) {
+        (void)fsync(fd);
+        close(fd);
+    }
 }
 #endif
 

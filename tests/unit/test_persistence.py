@@ -11,6 +11,20 @@ def test_rdb_roundtrip(tmp_path):
         assert c.get("rdb_key") == b"hello"
 
 
+def test_rdb_ignores_and_removes_abandoned_tmp_snapshot(tmp_path):
+    with CredishClient(data_dir=str(tmp_path), persistence="rdb") as c:
+        c.set("rdb_key", "stable")
+        c.save()
+
+    tmp_snapshot = tmp_path / "credish.rdb.tmp"
+    tmp_snapshot.write_bytes(b"CREDISH_RDB\n\x01partial")
+
+    with CredishClient(data_dir=str(tmp_path), persistence="rdb") as c:
+        assert c.get("rdb_key") == b"stable"
+
+    assert not tmp_snapshot.exists()
+
+
 def test_aof_roundtrip(tmp_path):
     with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
         c.set("aof_key", "world")
