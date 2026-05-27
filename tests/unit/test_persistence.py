@@ -58,6 +58,29 @@ def test_aof_roundtrip(tmp_path):
         assert c.get("aof_key") == b"world"
 
 
+def test_aof_roundtrip_binary_values_with_null_bytes(tmp_path):
+    cases = {
+        "leading": b"\x00hello",
+        "middle": b"hello\x00world",
+        "trailing": b"hello\x00",
+        "all_nulls": b"\x00" * 1024,
+        "large_binary": (b"header:" + (b"\x00abc123" * 9362))[:64 * 1024],
+    }
+
+    with CredishClient(
+        data_dir=str(tmp_path),
+        persistence=PERSISTENCE.AOF,
+        aof_fsync=AOF_FSYNC.ALWAYS,
+    ) as c:
+        for key, value in cases.items():
+            c.set(key, value)
+            assert c.get(key) == value
+
+    with CredishClient(data_dir=str(tmp_path), persistence=PERSISTENCE.AOF) as c:
+        for key, value in cases.items():
+            assert c.get(key) == value
+
+
 def test_hybrid_roundtrip(tmp_path):
     with CredishClient(data_dir=str(tmp_path), persistence="hybrid") as c:
         c.set("hybrid_key", "data")

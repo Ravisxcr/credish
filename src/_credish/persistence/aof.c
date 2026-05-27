@@ -46,7 +46,7 @@ int aof_open(credish_store *s) {
 
 /* Read one RESP bulk string $<len>\r\n<data>\r\n
  * Returns malloc'd buffer (caller frees) or NULL on error/EOF. */
-static char *read_bulk(FILE *f) {
+static char *read_bulk(FILE *f, size_t *out_len) {
     char line[256];
     if (!fgets(line, sizeof(line), f)) return NULL;
     if (line[0] != '$') return NULL;
@@ -58,6 +58,7 @@ static char *read_bulk(FILE *f) {
     buf[len] = '\0';
     /* consume \r\n */
     fgetc(f); fgetc(f);
+    *out_len = (size_t)len;
     return buf;
 }
 
@@ -70,7 +71,7 @@ static char *read_bulk(FILE *f) {
  * Only mutating commands are stored in the AOF, so we implement
  * a minimal replay-only dispatcher here.
  */
-static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
+static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_t *argv_lens) {
     if (argc < 1) return;
     credish_db *db = store_select_db(s, db_id);
     if (!db) return;
@@ -80,33 +81,33 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
 
     if (credish_strcasecmp(cmd, "SET") == 0) {
         ARGC_MIN(3);
-        credishObject *o = obj_create_string(argv[2], (int)strlen(argv[2]));
-        db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+        credishObject *o = obj_create_string(argv[2], (int)argv_lens[2]);
+        db_set(db, argv[1], (int)argv_lens[1], o, s);
         /* optional EX/PX */
         for (int i = 3; i + 1 < argc; i++) {
             if (credish_strcasecmp(argv[i], "EX") == 0) {
                 int64_t sec = atoll(argv[i + 1]);
                 int64_t dl = credish_now_ms() + sec * 1000LL;
-                db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
+                db_set_expire(db, argv[1], (int)argv_lens[1], dl);
                 i++;
             } else if (credish_strcasecmp(argv[i], "PX") == 0) {
                 int64_t ms = atoll(argv[i + 1]);
                 int64_t dl = credish_now_ms() + ms;
-                db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
+                db_set_expire(db, argv[1], (int)argv_lens[1], dl);
                 i++;
             }
         }
     } else if (credish_strcasecmp(cmd, "DEL") == 0) {
         for (int i = 1; i < argc; i++)
-            db_del(db, argv[i], (int)strlen(argv[i]), s);
+            db_del(db, argv[i], (int)argv_lens[i], s);
     } else if (credish_strcasecmp(cmd, "EXPIRE") == 0) {
         ARGC_MIN(3);
         int64_t sec = atoll(argv[2]);
         int64_t dl = credish_now_ms() + sec * 1000LL;
-        db_set_expire(db, argv[1], (int)strlen(argv[1]), dl);
+        db_set_expire(db, argv[1], (int)argv_lens[1], dl);
     } else if (credish_strcasecmp(cmd, "PERSIST") == 0) {
         ARGC_MIN(2);
-        db_remove_expire(db, argv[1], (int)strlen(argv[1]));
+        db_remove_expire(db, argv[1], (int)argv_lens[1]);
     } else if (credish_strcasecmp(cmd, "SELECT") == 0) {
         /* no-op during replay: db index tracked in AOF header per-command */
     } else if (credish_strcasecmp(cmd, "FLUSHDB") == 0) {
@@ -117,7 +118,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
     } else if (credish_strcasecmp(cmd, "INCRBY") == 0) {
         ARGC_MIN(3);
         long long val = 0;
-        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (o && o->type == OBJ_STRING) {
             int vlen; char *vptr = obj_string_ptr(o, &vlen);
             char tmp[64]; int cplen = vlen < 63 ? vlen : 63;
@@ -127,47 +128,47 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
         val += strtoll(argv[2], NULL, 10);
         char buf[24]; int blen = snprintf(buf, sizeof(buf), "%lld", val);
         credishObject *new_o = obj_create_string(buf, blen);
-        if (new_o) db_set(db, argv[1], (int)strlen(argv[1]), new_o, s);
+        if (new_o) db_set(db, argv[1], (int)argv_lens[1], new_o, s);
     } else if (credish_strcasecmp(cmd, "RPUSH") == 0) {
         ARGC_MIN(3);
-        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_list();
-            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
         }
         if (o && o->type == OBJ_LIST) {
             adlist *l = (adlist *)o->ptr;
             for (int i = 2; i < argc; i++) {
-                sds v = sds_new(argv[i], strlen(argv[i]));
+                sds v = sds_newlen(argv[i], argv_lens[i]);
                 if (v) adlist_push_tail(l, v);
             }
         }
     } else if (credish_strcasecmp(cmd, "LPUSH") == 0) {
         ARGC_MIN(3);
-        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_list();
-            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
         }
         if (o && o->type == OBJ_LIST) {
             adlist *l = (adlist *)o->ptr;
             for (int i = 2; i < argc; i++) {
-                sds v = sds_new(argv[i], strlen(argv[i]));
+                sds v = sds_newlen(argv[i], argv_lens[i]);
                 if (v) adlist_push_head(l, v);
             }
         }
     } else if (credish_strcasecmp(cmd, "ZADD") == 0) {
         ARGC_MIN(4);
-        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_zset();
-            if (o) db_set(db, argv[1], (int)strlen(argv[1]), o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
         }
         if (o && o->type == OBJ_ZSET) {
             zset *zs = (zset *)o->ptr;
             for (int i = 2; i + 1 < argc; i += 2) {
                 double score = strtod(argv[i], NULL);
-                sds member = sds_new(argv[i + 1], strlen(argv[i + 1]));
+                sds member = sds_newlen(argv[i + 1], argv_lens[i + 1]);
                 if (!member) continue;
                 double *oldp = dict_fetch_value(zs->dict, member);
                 if (oldp) zsl_delete(zs->zsl, *oldp, member);
@@ -178,11 +179,11 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv) {
         }
     } else if (credish_strcasecmp(cmd, "ZREM") == 0) {
         ARGC_MIN(3);
-        credishObject *o = db_lookup(db, argv[1], (int)strlen(argv[1]));
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (o && o->type == OBJ_ZSET) {
             zset *zs = (zset *)o->ptr;
             for (int i = 2; i < argc; i++) {
-                sds member = sds_new(argv[i], strlen(argv[i]));
+                sds member = sds_newlen(argv[i], argv_lens[i]);
                 if (!member) continue;
                 double *score = dict_fetch_value(zs->dict, member);
                 if (score) {
@@ -218,20 +219,26 @@ int aof_load(credish_store *s) {
         if (n <= 0) continue;
 
         char **argv = calloc(n, sizeof(char *));
-        if (!argv) break;
+        size_t *argv_lens = calloc(n, sizeof(size_t));
+        if (!argv || !argv_lens) {
+            free(argv);
+            free(argv_lens);
+            break;
+        }
 
         int ok = 1;
         for (int i = 0; i < n; i++) {
-            argv[i] = read_bulk(f);
+            argv[i] = read_bulk(f, &argv_lens[i]);
             if (!argv[i]) { ok = 0; break; }
         }
         if (ok) {
             /* The first "argv[0]" is the command; track SELECT for db_id */
             if (n >= 2 && credish_strcasecmp(argv[0], "SELECT") == 0)
                 db_id = atoi(argv[1]);
-            replay_cmd(s, db_id, n, argv);
+            replay_cmd(s, db_id, n, argv, argv_lens);
         }
         for (int i = 0; i < n; i++) free(argv[i]);
+        free(argv_lens);
         free(argv);
         if (!ok) break;
     }

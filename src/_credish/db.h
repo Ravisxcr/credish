@@ -54,5 +54,7 @@ int            db_is_expired(credish_db *db, const char *key, int keylen);
 
 /* AOF helpers (internal) */
 void aof_append(credish_store *s, const char *cmd, int argc, const char **argv);
+void aof_append_len(credish_store *s, const char *cmd, int argc,
+                    const char **argv, const size_t *argv_lens);
 
 #endif /* CREDISH_DB_H */

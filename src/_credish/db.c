@@ -182,14 +182,15 @@ void db_remove_expire(credish_db *db, const char *key, int keylen) {
 /* AOF command append                                                  */
 /* ------------------------------------------------------------------ */
 
-void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) {
+void aof_append_len(credish_store *s, const char *cmd, int argc,
+                    const char **argv, const size_t *argv_lens) {
     if (!s->aof_fp) return;
     /* RESP-like inline format: *N\r\n$len\r\ndata\r\n... */
     size_t cmdlen = strlen(cmd);
     size_t total = (size_t)snprintf(NULL, 0, "*%d\r\n", argc + 1);
     total += (size_t)snprintf(NULL, 0, "$%zu\r\n", cmdlen) + cmdlen + 2;
     for (int i = 0; i < argc; i++) {
-        size_t len = strlen(argv[i]);
+        size_t len = argv_lens[i];
         total += (size_t)snprintf(NULL, 0, "$%zu\r\n", len) + len + 2;
     }
 
@@ -203,7 +204,7 @@ void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) 
     memcpy(p, "\r\n", 2); p += 2;
 
     for (int i = 0; i < argc; i++) {
-        size_t len = strlen(argv[i]);
+        size_t len = argv_lens[i];
         p += sprintf(p, "$%zu\r\n", len);
         memcpy(p, argv[i], len); p += len;
         memcpy(p, "\r\n", 2); p += 2;
@@ -214,4 +215,14 @@ void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) 
 
     if (s->cfg.aof_fsync == AOF_FSYNC_ALWAYS)
         fflush(s->aof_fp);
+}
+
+void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) {
+    if (!s->aof_fp) return;
+    size_t *argv_lens = malloc((size_t)argc * sizeof(size_t));
+    if (!argv_lens) return;
+    for (int i = 0; i < argc; i++)
+        argv_lens[i] = strlen(argv[i]);
+    aof_append_len(s, cmd, argc, argv, argv_lens);
+    free(argv_lens);
 }

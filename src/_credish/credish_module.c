@@ -303,7 +303,8 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
         Py_RETURN_NONE;
     }
     const char *argv_arr[] = { key, (char *)o->ptr };
-    aof_append(s, "SET", 2, argv_arr);
+    size_t argv_lens[] = { (size_t)keylen, (size_t)SDS_LEN((sds)o->ptr) };
+    aof_append_len(s, "SET", 2, argv_arr, argv_lens);
     Py_RETURN_TRUE;
 }
 
