@@ -47,7 +47,7 @@ jobs:
           CIBW_ARCHS_LINUX: ${{ matrix.buildplat[1] == 'manylinux_aarch64' && 'aarch64' || 'x86_64' }}
           CIBW_ARCHS_MACOS: ${{ matrix.buildplat[1] == 'macosx_arm64' && 'arm64' || 'x86_64' }}
           CIBW_ARCHS_WINDOWS: AMD64
-          CIBW_BUILD_FRONTEND: ${{ matrix.buildplat[1] == 'win_amd64' && 'build; args: --no-isolation' || 'build' }}
+          CIBW_BUILD_FRONTEND: "${{ matrix.buildplat[1] == 'win_amd64' && 'build; args: --no-isolation' || 'build' }}"
           CIBW_BUILD_VERBOSITY: 1
 
       - name: Upload wheels
