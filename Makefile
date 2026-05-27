@@ -68,8 +68,5 @@ install-dev:
 docker-build:
 	docker buildx build --file Dockerfile.ci --target test --tag credish:ci --load .
 
-benchmark:
-	$(PYTHON) benchmarks/bench.py
-
 test:
 	$(PYTHON) -m pytest tests

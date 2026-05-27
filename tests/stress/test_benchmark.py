@@ -1,10 +1,11 @@
 """
 Quick throughput benchmark: SET and GET throughput.
-Run:  python benchmarks/bench.py
+Run:  python tests/stress/bench.py
 """
 
-import time
 import tempfile
+import time
+
 from credish import CredishClient
 
 N = 1_000_000
@@ -19,6 +20,7 @@ def bench(label, fn):
 
 with tempfile.TemporaryDirectory() as tmp:
     with CredishClient(data_dir=tmp, persistence="none") as c:
+
         def do_set():
             for i in range(N):
                 c.set(f"key:{i}", f"value:{i}")
@@ -27,6 +29,6 @@ with tempfile.TemporaryDirectory() as tmp:
             for i in range(N):
                 c.get(f"key:{i}")
 
-        do_set()   # warm-up
+        do_set()  # warm-up
         bench("SET (no persistence)", do_set)
         bench("GET (no persistence)", do_get)
