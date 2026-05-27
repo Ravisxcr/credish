@@ -54,7 +54,7 @@ credish_store *store_open(const credish_config *cfg) {
         s->dbs[i].expires = dict_create(&expires_type);
     }
 
-    pthread_rwlock_init(&s->lock, NULL);
+    credish_rwlock_init(&s->lock);
 
     /* Load persisted data */
     if (cfg->persist_mode == PERSIST_AOF || cfg->persist_mode == PERSIST_HYBRID)
@@ -92,7 +92,7 @@ void store_close(credish_store *s) {
         dict_free(s->dbs[i].keys);
         dict_free(s->dbs[i].expires);
     }
-    pthread_rwlock_destroy(&s->lock);
+    credish_rwlock_destroy(&s->lock);
     free(s);
 }
 
@@ -106,9 +106,7 @@ credish_db *store_select_db(credish_store *s, int db_id) {
 }
 
 static int64_t now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+    return credish_now_ms();
 }
 
 int db_is_expired(credish_db *db, const char *key, int keylen) {

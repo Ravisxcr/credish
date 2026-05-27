@@ -1,0 +1,35 @@
+FROM python:3.12-bookworm AS build
+
+WORKDIR /work
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip install --upgrade pip build twine auditwheel
+
+COPY pyproject.toml setup.py README.md MANIFEST.in ./
+COPY credish ./credish
+COPY src ./src
+
+RUN python -m build
+RUN python -m auditwheel repair --wheel-dir wheelhouse dist/*-linux_x86_64.whl \
+    && rm -f dist/*-linux_x86_64.whl \
+    && cp wheelhouse/*.whl dist/
+
+FROM build AS check
+RUN python -m twine check dist/*
+
+FROM python:3.12-slim-bookworm AS test
+
+WORKDIR /work
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=check /work/dist/*.whl /tmp/
+COPY tests ./tests
+
+RUN python -m pip install --no-cache-dir /tmp/*.whl pytest pytest-timeout
+RUN python -m pytest tests/unit
