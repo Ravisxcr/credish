@@ -7,26 +7,37 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-credishObject *obj_create_string(const char *data, int len) {
+credishObject *obj_create_string_encoded(const char *data, int len, int encoding) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_STRING;
+    o->encoding = encoding;
     o->ptr  = sds_newlen(data, (size_t)len);
     return o;
 }
 
-credishObject *obj_steal_string(sds s) {
+credishObject *obj_create_string(const char *data, int len) {
+    return obj_create_string_encoded(data, len, OBJ_ENCODING_RAW);
+}
+
+credishObject *obj_steal_string_encoded(sds s, int encoding) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_STRING;
+    o->encoding = encoding;
     o->ptr  = s;
     return o;
+}
+
+credishObject *obj_steal_string(sds s) {
+    return obj_steal_string_encoded(s, OBJ_ENCODING_RAW);
 }
 
 credishObject *obj_create_string_int(int64_t val) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_STRING;
+    o->encoding = OBJ_ENCODING_RAW;
     char buf[22];
     int n = snprintf(buf, sizeof(buf), "%lld", (long long)val);
     o->ptr = sds_newlen(buf, (size_t)n);
@@ -37,6 +48,7 @@ credishObject *obj_create_list(void) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_LIST;
+    o->encoding = OBJ_ENCODING_RAW;
     o->ptr  = adlist_create();
     return o;
 }
@@ -55,6 +67,7 @@ credishObject *obj_create_hash(void) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_HASH;
+    o->encoding = OBJ_ENCODING_RAW;
     o->ptr  = dict_create(&hash_dict_type);
     return o;
 }
@@ -73,6 +86,7 @@ credishObject *obj_create_set(void) {
     credishObject *o = bufpool_alloc(sizeof(*o));
     if (!o) return NULL;
     o->type = OBJ_SET;
+    o->encoding = OBJ_ENCODING_RAW;
     o->ptr  = dict_create(&set_dict_type);
     return o;
 }
@@ -101,6 +115,7 @@ credishObject *obj_create_zset(void) {
     zs->dict = dict_create(&zset_dict_type);
     zs->zsl  = zsl_create();
     o->type  = OBJ_ZSET;
+    o->encoding = OBJ_ENCODING_RAW;
     o->ptr   = zs;
     return o;
 }

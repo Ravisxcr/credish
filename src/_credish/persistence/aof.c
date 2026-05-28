@@ -81,7 +81,14 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
 
     if (credish_strcasecmp(cmd, "SET") == 0) {
         ARGC_MIN(3);
-        credishObject *o = obj_create_string(argv[2], (int)argv_lens[2]);
+        int encoding = OBJ_ENCODING_RAW;
+        for (int i = 3; i + 1 < argc; i++) {
+            if (credish_strcasecmp(argv[i], "FMT") == 0) {
+                encoding = atoi(argv[i + 1]);
+                break;
+            }
+        }
+        credishObject *o = obj_create_string_encoded(argv[2], (int)argv_lens[2], encoding);
         db_set(db, argv[1], (int)argv_lens[1], o, s);
         /* optional EX/PX */
         for (int i = 3; i + 1 < argc; i++) {

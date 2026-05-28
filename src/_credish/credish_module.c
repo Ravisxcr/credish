@@ -268,13 +268,38 @@ static PyObject *py_get(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *py_get_encoding(PyObject *self, PyObject *args) {
+    (void)self;
+    PyObject *handle; PyObject *key_obj;
+    if (!PyArg_ParseTuple(args, "OO", &handle, &key_obj)) return NULL;
+    credish_store *s = get_store(handle); if (!s) return NULL;
+
+    char *key; int keylen;
+    if (!decode_key(key_obj, &key, &keylen)) return NULL;
+
+    credish_rwlock_wrlock(&s->lock);
+    credish_db *db = credish_get_db(handle, s);
+    credishObject *o = db_lookup(db, key, keylen);
+    PyObject *result;
+    if (!o) { result = Py_None; Py_INCREF(result); }
+    else if (o->type != OBJ_STRING) {
+        credish_rwlock_wrunlock(&s->lock);
+        PyErr_SetString(PyExc_TypeError, "WRONGTYPE: not a string");
+        return NULL;
+    } else {
+        result = PyLong_FromLong(o->encoding);
+    }
+    credish_rwlock_wrunlock(&s->lock);
+    return result;
+}
+
 static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
-    static char *kwlist[] = {"handle","key","value","ex","px","nx","xx",NULL};
+    static char *kwlist[] = {"handle","key","value","ex","px","nx","xx","value_encoding",NULL};
     PyObject *handle, *key_obj, *val_obj;
-    int ex = -1, px = -1, nx = 0, xx = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|iibb", kwlist,
-            &handle, &key_obj, &val_obj, &ex, &px, &nx, &xx))
+    int ex = -1, px = -1, nx = 0, xx = 0, value_encoding = OBJ_ENCODING_RAW;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|iibbi", kwlist,
+            &handle, &key_obj, &val_obj, &ex, &px, &nx, &xx, &value_encoding))
         return NULL;
 
     credish_store *s = get_store(handle); if (!s) return NULL;
@@ -283,7 +308,7 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
     sds val_sds = pyobj_to_sds(val_obj);
     if (!val_sds) return NULL;
 
-    credishObject *o = obj_steal_string(val_sds);
+    credishObject *o = obj_steal_string_encoded(val_sds, value_encoding);
     if (!o) { sds_free(val_sds); return PyErr_NoMemory(); }
 
     int did_set = 0;
@@ -302,9 +327,11 @@ static PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw) {
         obj_free(o);
         Py_RETURN_NONE;
     }
-    const char *argv_arr[] = { key, (char *)o->ptr };
-    size_t argv_lens[] = { (size_t)keylen, (size_t)SDS_LEN((sds)o->ptr) };
-    aof_append_len(s, "SET", 2, argv_arr, argv_lens);
+    char encbuf[12];
+    int enclen = snprintf(encbuf, sizeof(encbuf), "%d", value_encoding);
+    const char *argv_arr[] = { key, (char *)o->ptr, "FMT", encbuf };
+    size_t argv_lens[] = { (size_t)keylen, (size_t)SDS_LEN((sds)o->ptr), 3, (size_t)enclen };
+    aof_append_len(s, "SET", 4, argv_arr, argv_lens);
     Py_RETURN_TRUE;
 }
 
@@ -668,6 +695,7 @@ static PyMethodDef credish_methods[] = {
     {"bgsave",   py_bgsave,              METH_VARARGS,               NULL},
     {"select",   py_select,              METH_VARARGS,               NULL},
     {"get",      py_get,                  METH_VARARGS,               NULL},
+    {"get_encoding", py_get_encoding,     METH_VARARGS,               NULL},
     {"set",      (PyCFunction)py_set,     METH_VARARGS|METH_KEYWORDS, NULL},
     {"delete",   py_delete,              METH_VARARGS,               NULL},
     {"exists",   py_exists,              METH_VARARGS,               NULL},

@@ -14,30 +14,33 @@ def client(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Invalid value types — storing arbitrary Python objects
+# Invalid value types — storing non-serializable Python objects
 # ---------------------------------------------------------------------------
 
 class TestInvalidValueTypes:
-    def test_set_python_dict(self, client):
-        with pytest.raises(TypeError):
-            client.set("key", {"a": 1, "b": 2})
+    def test_set_json_compatible_python_containers(self, client):
+        client.set("dict", {"a": 1, "b": 2})
+        client.set("list", [1, 2, 3])
 
-    def test_set_python_list(self, client):
-        with pytest.raises(TypeError):
-            client.set("key", [1, 2, 3])
+        assert client.get("dict", native=True) == {"a": 1, "b": 2}
+        assert client.get("list", native=True) == [1, 2, 3]
 
     def test_set_python_tuple(self, client):
-        with pytest.raises(TypeError):
+        with pytest.raises(DataError):
             client.set("key", (1, 2))
+
+    def test_set_dict_with_non_string_key(self, client):
+        with pytest.raises(DataError):
+            client.set("key", {1: "one"})
 
     def test_set_credish_client_instance(self, client):
         """The client itself must not be storable as a value."""
-        with pytest.raises(TypeError):
+        with pytest.raises(DataError):
             client.set("key", client)
 
     def test_set_none_value(self, client):
-        with pytest.raises(TypeError):
-            client.set("key", None)
+        client.set("key", None)
+        assert client.get("key", native=True) is None
 
     def test_lpush_python_objects(self, client):
         """lpush with a dict element should be rejected.
