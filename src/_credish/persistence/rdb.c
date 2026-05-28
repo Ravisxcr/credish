@@ -32,8 +32,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
-#include <pthread.h>
-#include <unistd.h>
+#include "platform.h"
 
 #define RDB_MAGIC    "CREDISH_RDB\n"
 #define RDB_VERSION  1
@@ -77,93 +76,126 @@ static uint32_t crc32_update(uint32_t crc, const void *buf, size_t len) {
 
 static uint32_t g_crc;
 
-static void w_u8(FILE *f, uint8_t v) {
-    fwrite(&v, 1, 1, f);
-    g_crc = crc32_update(g_crc, &v, 1);
+static int rdb_tmp_path(char *buf, size_t len, const char *data_dir) {
+    char path[600];
+    rdb_path(path, sizeof(path), data_dir);
+    snprintf(buf, len, "%s.tmp", path);
+    return 0;
 }
 
-static void w_u32(FILE *f, uint32_t v) {
+static int w_raw(FILE *f, const void *data, size_t len) {
+    return fwrite(data, 1, len, f) == len ? 0 : -1;
+}
+
+static int w_u8(FILE *f, uint8_t v) {
+    if (w_raw(f, &v, 1) != 0) return -1;
+    g_crc = crc32_update(g_crc, &v, 1);
+    return 0;
+}
+
+static int w_u32(FILE *f, uint32_t v) {
     uint8_t b[4] = { (uint8_t)(v >> 24), (uint8_t)(v >> 16),
                      (uint8_t)(v >> 8),  (uint8_t)v };
-    fwrite(b, 1, 4, f);
+    if (w_raw(f, b, 4) != 0) return -1;
     g_crc = crc32_update(g_crc, b, 4);
+    return 0;
 }
 
-static void w_i64(FILE *f, int64_t v) {
+static int w_i64(FILE *f, int64_t v) {
     uint64_t u = (uint64_t)v;
     uint8_t b[8];
     for (int i = 7; i >= 0; i--) { b[i] = u & 0xFF; u >>= 8; }
-    fwrite(b, 1, 8, f);
+    if (w_raw(f, b, 8) != 0) return -1;
     g_crc = crc32_update(g_crc, b, 8);
+    return 0;
 }
 
-static void w_blob(FILE *f, const char *data, uint32_t len) {
-    w_u32(f, len);
-    fwrite(data, 1, len, f);
+static int w_blob(FILE *f, const char *data, uint32_t len) {
+    if (w_u32(f, len) != 0) return -1;
+    if (w_raw(f, data, len) != 0) return -1;
     g_crc = crc32_update(g_crc, data, len);
+    return 0;
 }
 
-static void w_sds(FILE *f, sds s) {
-    w_blob(f, s, (uint32_t)SDS_LEN(s));
+static int w_sds(FILE *f, sds s) {
+    return w_blob(f, s, (uint32_t)SDS_LEN(s));
 }
 
 /* ------------------------------------------------------------------ */
 /* Value serialisation                                                  */
 /* ------------------------------------------------------------------ */
 
-static void save_string(FILE *f, credishObject *o) {
+static int save_string(FILE *f, credishObject *o) {
     sds s = (sds)o->ptr;
-    w_sds(f, s);
+    return w_sds(f, s);
 }
 
-static void save_list(FILE *f, credishObject *o) {
+static int save_list(FILE *f, credishObject *o) {
     adlist *l = (adlist *)o->ptr;
-    w_u32(f, (uint32_t)l->len);
+    if (w_u32(f, (uint32_t)l->len) != 0) return -1;
     listNode *n = l->head;
     while (n) {
-        w_sds(f, (sds)n->value);
+        if (w_sds(f, (sds)n->value) != 0) return -1;
         n = n->next;
     }
+    return 0;
 }
 
-static void save_hash(FILE *f, credishObject *o) {
+static int save_hash(FILE *f, credishObject *o) {
     dict *d = (dict *)o->ptr;
-    w_u32(f, (uint32_t)dict_size(d));
+    if (w_u32(f, (uint32_t)dict_size(d)) != 0) return -1;
     dictIterator *it = dict_iter_new(d);
+    if (!it) return -1;
     dictEntry *e;
     while ((e = dict_iter_next(it))) {
-        w_sds(f, (sds)e->key);
-        w_sds(f, (sds)e->v.val);
+        if (w_sds(f, (sds)e->key) != 0 || w_sds(f, (sds)e->v.val) != 0) {
+            dict_iter_free(it);
+            return -1;
+        }
     }
     dict_iter_free(it);
+    return 0;
 }
 
-static void save_set(FILE *f, credishObject *o) {
+static int save_set(FILE *f, credishObject *o) {
     dict *d = (dict *)o->ptr;
-    w_u32(f, (uint32_t)dict_size(d));
+    if (w_u32(f, (uint32_t)dict_size(d)) != 0) return -1;
     dictIterator *it = dict_iter_new(d);
+    if (!it) return -1;
     dictEntry *e;
     while ((e = dict_iter_next(it)))
-        w_sds(f, (sds)e->key);
+        if (w_sds(f, (sds)e->key) != 0) {
+            dict_iter_free(it);
+            return -1;
+        }
     dict_iter_free(it);
+    return 0;
 }
 
-static void save_zset(FILE *f, credishObject *o) {
+static int save_zset(FILE *f, credishObject *o) {
     zset *zs = (zset *)o->ptr;
-    w_u32(f, (uint32_t)dict_size(zs->dict));
+    if (w_u32(f, (uint32_t)dict_size(zs->dict)) != 0) return -1;
     dictIterator *it = dict_iter_new(zs->dict);
+    if (!it) return -1;
     dictEntry *e;
     while ((e = dict_iter_next(it))) {
-        w_sds(f, (sds)e->key);
+        if (w_sds(f, (sds)e->key) != 0) {
+            dict_iter_free(it);
+            return -1;
+        }
         double score = *(double *)e->v.val;
         uint64_t raw;
         memcpy(&raw, &score, 8);
         uint8_t b[8];
         for (int i = 7; i >= 0; i--) { b[i] = raw & 0xFF; raw >>= 8; }
-        fwrite(b, 1, 8, f);
+        if (w_raw(f, b, 8) != 0) {
+            dict_iter_free(it);
+            return -1;
+        }
         g_crc = crc32_update(g_crc, b, 8);
     }
     dict_iter_free(it);
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -174,7 +206,8 @@ int rdb_save(credish_store *s) {
     char path[600];
     rdb_path(path, sizeof(path), s->cfg.data_dir);
     char tmp[608];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    rdb_tmp_path(tmp, sizeof(tmp), s->cfg.data_dir);
+    remove(tmp);
 
     FILE *f = fopen(tmp, "wb");
     if (!f) return -1;
@@ -182,53 +215,63 @@ int rdb_save(credish_store *s) {
     g_crc = 0;
     /* Magic + version */
     size_t mlen = strlen(RDB_MAGIC);
-    fwrite(RDB_MAGIC, 1, mlen, f);
+    if (w_raw(f, RDB_MAGIC, mlen) != 0) goto fail;
     g_crc = crc32_update(g_crc, RDB_MAGIC, mlen);
-    w_u8(f, RDB_VERSION);
+    if (w_u8(f, RDB_VERSION) != 0) goto fail;
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
         credish_db *db = &s->dbs[i];
         if (dict_size(db->keys) == 0) continue;
 
-        w_u8(f, SECTION_DB);
-        w_u32(f, (uint32_t)i);
-        w_u32(f, (uint32_t)dict_size(db->keys));
+        if (w_u8(f, SECTION_DB) != 0 ||
+            w_u32(f, (uint32_t)i) != 0 ||
+            w_u32(f, (uint32_t)dict_size(db->keys)) != 0)
+            goto fail;
 
         dictIterator *it = dict_iter_new(db->keys);
+        if (!it) goto fail;
         dictEntry    *e;
         while ((e = dict_iter_next(it))) {
             credishObject *o = (credishObject *)e->v.val;
-            w_u8(f, (uint8_t)o->type);
+            if (w_u8(f, (uint8_t)o->type) != 0) { dict_iter_free(it); goto fail; }
 
             sds key = (sds)e->key;
-            w_sds(f, key);
+            if (w_sds(f, key) != 0) { dict_iter_free(it); goto fail; }
 
             /* Expiry */
             int64_t dl = db_get_expire(db, key, (int)SDS_LEN(key));
-            if (dl >= 0) { w_u8(f, 1); w_i64(f, dl); }
-            else          { w_u8(f, 0); }
+            if (dl >= 0) {
+                if (w_u8(f, 1) != 0 || w_i64(f, dl) != 0) { dict_iter_free(it); goto fail; }
+            } else if (w_u8(f, 0) != 0) { dict_iter_free(it); goto fail; }
 
             switch (o->type) {
-            case OBJ_STRING: save_string(f, o); break;
-            case OBJ_LIST:   save_list(f, o);   break;
-            case OBJ_HASH:   save_hash(f, o);   break;
-            case OBJ_SET:    save_set(f, o);     break;
-            case OBJ_ZSET:   save_zset(f, o);    break;
+            case OBJ_STRING: if (save_string(f, o) != 0) { dict_iter_free(it); goto fail; } break;
+            case OBJ_LIST:   if (save_list(f, o) != 0)   { dict_iter_free(it); goto fail; } break;
+            case OBJ_HASH:   if (save_hash(f, o) != 0)   { dict_iter_free(it); goto fail; } break;
+            case OBJ_SET:    if (save_set(f, o) != 0)    { dict_iter_free(it); goto fail; } break;
+            case OBJ_ZSET:   if (save_zset(f, o) != 0)   { dict_iter_free(it); goto fail; } break;
+            default: dict_iter_free(it); goto fail;
             }
         }
         dict_iter_free(it);
     }
 
-    w_u8(f, SECTION_EOF);
+    if (w_u8(f, SECTION_EOF) != 0) goto fail;
     uint32_t final_crc = g_crc;
     uint8_t cb[4] = { (uint8_t)(final_crc >> 24), (uint8_t)(final_crc >> 16),
                       (uint8_t)(final_crc >> 8),  (uint8_t)final_crc };
-    fwrite(cb, 1, 4, f);
-    fflush(f);
-    fclose(f);
-    rename(tmp, path);
+    if (w_raw(f, cb, 4) != 0) goto fail;
+    if (credish_fsync_file(f) != 0) goto fail;
+    if (fclose(f) != 0) { remove(tmp); return -1; }
+    if (rename(tmp, path) != 0) { remove(tmp); return -1; }
+    credish_fsync_parent_dir(path);
     s->last_save_time = (int64_t)time(NULL);
     return 0;
+
+fail:
+    fclose(f);
+    remove(tmp);
+    return -1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,6 +304,10 @@ static sds r_sds(FILE *f) {
 int rdb_load(credish_store *s) {
     char path[600];
     rdb_path(path, sizeof(path), s->cfg.data_dir);
+    char tmp[608];
+    rdb_tmp_path(tmp, sizeof(tmp), s->cfg.data_dir);
+    remove(tmp);
+
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
 
@@ -366,13 +413,16 @@ int rdb_load(credish_store *s) {
 
 static void *bgsave_fn(void *arg) {
     credish_store *s = (credish_store *)arg;
-    pthread_rwlock_rdlock(&s->lock);
+    credish_rwlock_rdlock(&s->lock);
     rdb_save(s);
-    pthread_rwlock_unlock(&s->lock);
+    credish_rwlock_rdunlock(&s->lock);
     return NULL;
 }
 
 int rdb_bgsave(credish_store *s) {
-    pthread_t t;
-    return pthread_create(&t, NULL, bgsave_fn, s) == 0 ? 0 : -1;
+    credish_thread_t t;
+    if (credish_thread_create(&t, bgsave_fn, s) != 0)
+        return -1;
+    credish_thread_detach(t);
+    return 0;
 }

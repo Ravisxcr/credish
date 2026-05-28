@@ -8,6 +8,7 @@ with minimal changes.
 from __future__ import annotations
 from typing import Any, Optional, Union
 import credish._credish as _credish
+from credish.constants import AOF_FSYNC, PERSISTENCE
 from credish.exceptions import DataError
 
 
@@ -21,14 +22,16 @@ class CredishClient:
         Directory where RDB snapshot and AOF log are stored.
         Defaults to the current working directory.
     persistence:
-        ``"aof"``  — append-only log (default, safest).
-        ``"rdb"``  — periodic binary snapshot.
-        ``"hybrid"`` — RDB base + AOF delta (fastest recovery).
-        ``"none"`` — no persistence (pure in-memory).
+        ``PERSISTENCE.AOF`` or ``"aof"`` — append-only log.
+        ``PERSISTENCE.RDB`` or ``"rdb"`` — periodic binary snapshot.
+        ``PERSISTENCE.HYBRID`` or ``"hybrid"`` — RDB base + AOF delta.
+        ``PERSISTENCE.NONE`` or ``"none"`` — no persistence.
     save_interval:
         Seconds between automatic RDB snapshots (ignored when persistence="aof").
     aof_fsync:
-        ``"always"`` | ``"everysec"`` (default) | ``"no"``
+        ``AOF_FSYNC.ALWAYS`` or ``"always"``
+        ``AOF_FSYNC.EVERYSEC`` or ``"everysec"`` (default)
+        ``AOF_FSYNC.NO`` or ``"no"``
     db:
         Logical database index (0–15).
     """
@@ -36,9 +39,9 @@ class CredishClient:
     def __init__(
         self,
         data_dir: str = ".",
-        persistence: str = "hybrid",
+        persistence: str | PERSISTENCE = PERSISTENCE.HYBRID,
         save_interval: int = 300,
-        aof_fsync: str = "everysec",
+        aof_fsync: str | AOF_FSYNC = AOF_FSYNC.EVERYSEC,
         db: int = 0,
         _store: Any = None,
         _owns_store: bool = True,

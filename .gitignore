@@ -220,4 +220,4 @@ __marimo__/
 .streamlit/secrets.toml
 .codex/
 wheelhouse/
-MANIFEST.in
+main.py

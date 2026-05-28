@@ -13,11 +13,19 @@
 typedef char *sds;
 
 /* Header stored before the character data. */
+#ifdef _MSC_VER
+#pragma pack(push, 1)
+typedef struct sdshdr {
+#else
 typedef struct __attribute__((packed)) sdshdr {
+#endif
     uint32_t len;   /* used bytes           */
     uint32_t alloc; /* allocated bytes (excl. header + null terminator) */
     char     buf[]; /* actual string data (null-terminated)             */
 } sdshdr;
+#ifdef _MSC_VER
+#pragma pack(pop)
+#endif
 
 #define SDS_HDR(s)  ((sdshdr *)((s) - sizeof(sdshdr)))
 #define SDS_LEN(s)  (SDS_HDR(s)->len)

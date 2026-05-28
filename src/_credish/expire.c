@@ -1,7 +1,7 @@
 #include "expire.h"
 #include "db.h"
 #include "sds.h"
-#include <pthread.h>
+#include "platform.h"
 #include <time.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -13,16 +13,14 @@
 #define SWEEP_MAX_LOOPS    16    /* bound work per db per cycle        */
 
 static int64_t sweep_now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+    return credish_now_ms();
 }
 
 static int sweep_db_sample(credish_db *db, unsigned int *seed) {
     size_t total = dict_size(db->expires);
     if (total == 0) return 0;
 
-    size_t offset = (size_t)(rand_r(seed) % (unsigned int)total);
+    size_t offset = (size_t)(credish_rand_r(seed) % (unsigned int)total);
     dictIterator *it = dict_iter_new(db->expires);
     dictEntry    *e;
 
@@ -63,26 +61,28 @@ static void sweep_db(credish_db *db, unsigned int *seed) {
 static void *sweep_thread_fn(void *arg) {
     credish_store *s = (credish_store *)arg;
     unsigned int seed = (unsigned int)(uintptr_t)s ^ (unsigned int)time(NULL);
-    struct timespec interval = {
-        .tv_sec  = 0,
-        .tv_nsec = SWEEP_INTERVAL_MS * 1000000L,
-    };
     while (s->sweep_running) {
-        nanosleep(&interval, NULL);
-        pthread_rwlock_wrlock(&s->lock);
+        credish_sleep_ms(SWEEP_INTERVAL_MS);
+        credish_rwlock_wrlock(&s->lock);
         for (int i = 0; i < CREDISH_DB_COUNT; i++)
             sweep_db(&s->dbs[i], &seed);
-        pthread_rwlock_unlock(&s->lock);
+        credish_rwlock_wrunlock(&s->lock);
     }
     return NULL;
 }
 
 void expire_sweep_start(credish_store *s) {
     s->sweep_running = 1;
-    pthread_create(&s->sweep_thread, NULL, sweep_thread_fn, s);
+    s->sweep_thread_started =
+        credish_thread_create(&s->sweep_thread, sweep_thread_fn, s) == 0;
+    if (!s->sweep_thread_started)
+        s->sweep_running = 0;
 }
 
 void expire_sweep_stop(credish_store *s) {
     s->sweep_running = 0;
-    pthread_join(s->sweep_thread, NULL);
+    if (s->sweep_thread_started) {
+        credish_thread_join(s->sweep_thread);
+        s->sweep_thread_started = 0;
+    }
 }

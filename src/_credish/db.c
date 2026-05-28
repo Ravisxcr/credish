@@ -54,7 +54,7 @@ credish_store *store_open(const credish_config *cfg) {
         s->dbs[i].expires = dict_create(&expires_type);
     }
 
-    pthread_rwlock_init(&s->lock, NULL);
+    credish_rwlock_init(&s->lock);
 
     /* Load persisted data */
     if (cfg->persist_mode == PERSIST_AOF || cfg->persist_mode == PERSIST_HYBRID)
@@ -92,7 +92,7 @@ void store_close(credish_store *s) {
         dict_free(s->dbs[i].keys);
         dict_free(s->dbs[i].expires);
     }
-    pthread_rwlock_destroy(&s->lock);
+    credish_rwlock_destroy(&s->lock);
     free(s);
 }
 
@@ -106,9 +106,7 @@ credish_db *store_select_db(credish_store *s, int db_id) {
 }
 
 static int64_t now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+    return credish_now_ms();
 }
 
 int db_is_expired(credish_db *db, const char *key, int keylen) {
@@ -184,14 +182,15 @@ void db_remove_expire(credish_db *db, const char *key, int keylen) {
 /* AOF command append                                                  */
 /* ------------------------------------------------------------------ */
 
-void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) {
+void aof_append_len(credish_store *s, const char *cmd, int argc,
+                    const char **argv, const size_t *argv_lens) {
     if (!s->aof_fp) return;
     /* RESP-like inline format: *N\r\n$len\r\ndata\r\n... */
     size_t cmdlen = strlen(cmd);
     size_t total = (size_t)snprintf(NULL, 0, "*%d\r\n", argc + 1);
     total += (size_t)snprintf(NULL, 0, "$%zu\r\n", cmdlen) + cmdlen + 2;
     for (int i = 0; i < argc; i++) {
-        size_t len = strlen(argv[i]);
+        size_t len = argv_lens[i];
         total += (size_t)snprintf(NULL, 0, "$%zu\r\n", len) + len + 2;
     }
 
@@ -205,7 +204,7 @@ void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) 
     memcpy(p, "\r\n", 2); p += 2;
 
     for (int i = 0; i < argc; i++) {
-        size_t len = strlen(argv[i]);
+        size_t len = argv_lens[i];
         p += sprintf(p, "$%zu\r\n", len);
         memcpy(p, argv[i], len); p += len;
         memcpy(p, "\r\n", 2); p += 2;
@@ -216,4 +215,14 @@ void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) 
 
     if (s->cfg.aof_fsync == AOF_FSYNC_ALWAYS)
         fflush(s->aof_fp);
+}
+
+void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) {
+    if (!s->aof_fp) return;
+    size_t *argv_lens = malloc((size_t)argc * sizeof(size_t));
+    if (!argv_lens) return;
+    for (int i = 0; i < argc; i++)
+        argv_lens[i] = strlen(argv[i]);
+    aof_append_len(s, cmd, argc, argv, argv_lens);
+    free(argv_lens);
 }
