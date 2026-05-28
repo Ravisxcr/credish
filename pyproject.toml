@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "credish"
-version = "0.0.1"
+version = "0.0.2"
 description = "Redis-compatible in-process cache as a Python C extension"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,7 @@ addopts = "-s"
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-win32 *-musllinux*"
 test-requires = ["pytest", "pytest-timeout"]
-test-command = "pytest {project}/tests/unit"
+test-command = "pytest \"{project}/tests/unit\""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
