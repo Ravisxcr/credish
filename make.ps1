@@ -8,8 +8,7 @@ param(
         "check",
         "install-dev",
         "build-inplace",
-        "test",
-        "docker-build"
+        "test"
     )]
     [string]$Target = "help"
 )
@@ -37,7 +36,6 @@ function Show-Help {
     Write-Host "  .\make.ps1 install-dev   Install editable package with dev deps"
     Write-Host "  .\make.ps1 build-inplace Build the C extension into credish\"
     Write-Host "  .\make.ps1 test          Run tests"
-    Write-Host "  .\make.ps1 docker-build  Build and test with Docker CI target"
     Write-Host ""
     Write-Host "Tip: create a venv first with: py -3.12 -m venv .venv"
 }
@@ -95,9 +93,6 @@ try {
         }
         "test" {
             Invoke-Python -m pytest tests
-        }
-        "docker-build" {
-            docker buildx build --file Dockerfile.ci --target test --tag credish:ci --load .
         }
     }
 } finally {

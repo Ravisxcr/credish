@@ -50,6 +50,34 @@ The tests cover:
 - persistence round trips
 - common error conditions
 
+## Building Wheels
+
+Build the configured wheels from the host Python environment:
+
+```bash
+make build-wheels
+```
+
+Build Linux wheels through Docker and write the wheels to the local `dist/`
+directory using mounted source and output folders:
+
+```bash
+make build-linux-wheels-docker
+```
+
+By default this builds CPython 3.10 through 3.14 for `x86_64`. Override the
+build selector or architecture when needed:
+
+```bash
+CIBW_BUILD="cp312-* cp313-*" CIBW_ARCHS_LINUX="x86_64 aarch64" make build-linux-wheels-docker
+```
+
+For `aarch64` builds on an `x86_64` host, register QEMU first:
+
+```bash
+make setup-qemu
+```
+
 ## Adding a Command
 
 When adding a new command:
