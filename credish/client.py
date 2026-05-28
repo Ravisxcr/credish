@@ -6,10 +6,36 @@ with minimal changes.
 """
 
 from __future__ import annotations
+from enum import IntEnum
+import json
 from typing import Any, Optional, Union
 import credish._credish as _credish
 from credish.constants import AOF_FSYNC, PERSISTENCE
 from credish.exceptions import DataError
+
+
+class _ValueEncoding(IntEnum):
+    RAW = 0
+    JSON = 1
+    STR = 2
+    INT = 3
+    FLOAT = 4
+
+
+def _ensure_json_compatible(value: Any) -> None:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return
+    if isinstance(value, list):
+        for item in value:
+            _ensure_json_compatible(item)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise DataError("SET: JSON object keys must be strings")
+            _ensure_json_compatible(item)
+        return
+    raise DataError("SET: value must be bytes or a JSON-compatible Python datatype")
 
 
 class CredishClient:
@@ -168,7 +194,7 @@ class CredishClient:
     def set(
         self,
         key: str,
-        value: Union[str, bytes, int, float],
+        value: Any,
         ex: Optional[int] = None,
         px: Optional[int] = None,
         nx: bool = False,
@@ -176,13 +202,45 @@ class CredishClient:
     ) -> Optional[bool]:
         if nx and xx:
             raise DataError("SET: nx and xx are mutually exclusive")
-        return _credish.set(self._db, key, value,
+        value_encoding = _ValueEncoding.RAW
+        stored_value = value
+        if isinstance(value, str):
+            value_encoding = _ValueEncoding.STR
+        elif isinstance(value, bool) or value is None or isinstance(value, (list, dict)):
+            _ensure_json_compatible(value)
+            stored_value = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+            value_encoding = _ValueEncoding.JSON
+        elif isinstance(value, int):
+            stored_value = str(value)
+            value_encoding = _ValueEncoding.INT
+        elif isinstance(value, float):
+            stored_value = format(value, ".17g")
+            value_encoding = _ValueEncoding.FLOAT
+        elif isinstance(value, (bytearray, memoryview)):
+            stored_value = bytes(value)
+        elif not isinstance(value, bytes):
+            raise DataError("SET: value must be bytes or a JSON-compatible Python datatype")
+        return _credish.set(self._db, key, stored_value,
                             ex=-1 if ex is None else ex,
                             px=-1 if px is None else px,
-                            nx=nx, xx=xx)
+                            nx=nx, xx=xx,
+                            value_encoding=value_encoding)
 
-    def get(self, key: str) -> Optional[bytes]:
-        return _credish.get(self._db, key)
+    def get(self, key: str, native: bool = False) -> Any:
+        value = _credish.get(self._db, key)
+        if value is None or not native:
+            return value
+        encoding = _credish.get_encoding(self._db, key)
+        if encoding == _ValueEncoding.JSON:
+            return json.loads(value.decode("utf-8"))
+        if encoding == _ValueEncoding.STR:
+            return value.decode("utf-8")
+        if encoding == _ValueEncoding.INT:
+            return int(value)
+        if encoding == _ValueEncoding.FLOAT:
+            return float(value)
+        else:
+            return value
 
     def getset(self, key: str, value: Union[str, bytes]) -> Optional[bytes]:
         return _credish.getset(self._db, key, value)

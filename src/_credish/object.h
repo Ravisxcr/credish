@@ -11,6 +11,12 @@
 #define OBJ_ZSET    3
 #define OBJ_HASH    4
 
+#define OBJ_ENCODING_RAW   0
+#define OBJ_ENCODING_JSON  1
+#define OBJ_ENCODING_STR   2
+#define OBJ_ENCODING_INT   3
+#define OBJ_ENCODING_FLOAT 4
+
 /* Forward declarations */
 struct adlist;
 struct dict;
@@ -23,6 +29,7 @@ typedef struct zset {
 
 typedef struct credishObject {
     int   type;
+    int   encoding;
     union {
         void           *ptr;   /* string (sds), or pointer to container */
         int64_t         ival;  /* small integer optimisation            */
@@ -30,7 +37,9 @@ typedef struct credishObject {
 } credishObject;
 
 credishObject *obj_create_string(const char *data, int len);
+credishObject *obj_create_string_encoded(const char *data, int len, int encoding);
 credishObject *obj_steal_string(sds s);   /* takes ownership of s — no copy */
+credishObject *obj_steal_string_encoded(sds s, int encoding);
 credishObject *obj_create_string_int(int64_t val);
 credishObject *obj_create_list(void);
 credishObject *obj_create_hash(void);

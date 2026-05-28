@@ -35,7 +35,7 @@
 #include "platform.h"
 
 #define RDB_MAGIC    "CREDISH_RDB\n"
-#define RDB_VERSION  1
+#define RDB_VERSION  2
 #define SECTION_DB   0xFE
 #define SECTION_EOF  0xFF
 
@@ -244,6 +244,8 @@ int rdb_save(credish_store *s) {
                 if (w_u8(f, 1) != 0 || w_i64(f, dl) != 0) { dict_iter_free(it); goto fail; }
             } else if (w_u8(f, 0) != 0) { dict_iter_free(it); goto fail; }
 
+            if (w_u8(f, (uint8_t)o->encoding) != 0) { dict_iter_free(it); goto fail; }
+
             switch (o->type) {
             case OBJ_STRING: if (save_string(f, o) != 0) { dict_iter_free(it); goto fail; } break;
             case OBJ_LIST:   if (save_list(f, o) != 0)   { dict_iter_free(it); goto fail; } break;
@@ -317,7 +319,7 @@ int rdb_load(credish_store *s) {
         fclose(f); return -1;
     }
     uint8_t ver = r_u8(f);
-    if (ver != RDB_VERSION) { fclose(f); return -1; }
+    if (ver != 1 && ver != RDB_VERSION) { fclose(f); return -1; }
 
     while (1) {
         uint8_t section = r_u8(f);
@@ -335,12 +337,13 @@ int rdb_load(credish_store *s) {
 
             uint8_t has_exp = r_u8(f);
             int64_t dl = has_exp ? r_i64(f) : -1;
+            int encoding = ver >= 2 ? (int)r_u8(f) : OBJ_ENCODING_RAW;
 
             credishObject *o = NULL;
             switch (type) {
             case OBJ_STRING: {
                 sds val = r_sds(f);
-                o = obj_create_string(val, (int)SDS_LEN(val));
+                o = obj_create_string_encoded(val, (int)SDS_LEN(val), encoding);
                 sds_free(val);
                 break;
             }

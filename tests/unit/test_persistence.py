@@ -81,6 +81,23 @@ def test_aof_roundtrip_binary_values_with_null_bytes(tmp_path):
             assert c.get(key) == value
 
 
+@pytest.mark.parametrize("persistence", [PERSISTENCE.AOF, PERSISTENCE.RDB, PERSISTENCE.HYBRID])
+def test_native_values_roundtrip(persistence, tmp_path):
+    value = {"user": "ravi", "count": 3, "active": True, "tags": ["a", None]}
+
+    with CredishClient(
+        data_dir=str(tmp_path),
+        persistence=persistence,
+        aof_fsync=AOF_FSYNC.ALWAYS,
+    ) as c:
+        c.set("native", value)
+        c.save()
+
+    with CredishClient(data_dir=str(tmp_path), persistence=persistence) as c:
+        assert c.get("native") == b'{"user":"ravi","count":3,"active":true,"tags":["a",null]}'
+        assert c.get("native", native=True) == value
+
+
 def test_hybrid_roundtrip(tmp_path):
     with CredishClient(data_dir=str(tmp_path), persistence="hybrid") as c:
         c.set("hybrid_key", "data")
