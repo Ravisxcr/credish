@@ -10,67 +10,90 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
 /* Decode a Python str/bytes arg to (char*, int). */
 static int decode_key(PyObject *obj, char **out, int *out_len) {
+
     if (PyBytes_Check(obj)) {
         *out = PyBytes_AS_STRING(obj);
         *out_len = (int)PyBytes_GET_SIZE(obj);
         return 1;
     }
+
     if (PyUnicode_Check(obj)) {
         Py_ssize_t sz;
         *out = (char *)PyUnicode_AsUTF8AndSize(obj, &sz);
         *out_len = (int)sz;
         return *out != NULL;
     }
+
     PyErr_SetString(PyExc_TypeError, "key must be str or bytes");
+
     return 0;
 }
 
+
 static sds pyobj_to_sds(PyObject *obj) {
+
     if (PyBytes_Check(obj))
         return sds_newlen(PyBytes_AS_STRING(obj), (size_t)PyBytes_GET_SIZE(obj));
+
     if (PyUnicode_Check(obj)) {
         Py_ssize_t sz;
         const char *s = PyUnicode_AsUTF8AndSize(obj, &sz);
         return s ? sds_newlen(s, (size_t)sz) : NULL;
     }
+
     if (PyLong_Check(obj)) {
         long long v = PyLong_AsLongLong(obj);
         char buf[24];
         int n = snprintf(buf, sizeof(buf), "%lld", v);
         return sds_newlen(buf, (size_t)n);
     }
+
     if (PyFloat_Check(obj)) {
         double v = PyFloat_AS_DOUBLE(obj);
         char buf[32];
         int n = snprintf(buf, sizeof(buf), "%.17g", v);
         return sds_newlen(buf, (size_t)n);
     }
+
     PyErr_SetString(PyExc_TypeError, "value must be str, bytes, int, or float");
+
     return NULL;
 }
 
+
 static PyObject *zset_py_member_score(sds member, double score, int withscores) {
+
     PyObject *m = PyBytes_FromStringAndSize(member, (Py_ssize_t)SDS_LEN(member));
+
     if (!m) return NULL;
     if (!withscores) return m;
+
     PyObject *s = PyFloat_FromDouble(score);
+
     if (!s) { Py_DECREF(m); return NULL; }
+
     PyObject *t = PyTuple_Pack(2, m, s);
+
     Py_DECREF(m);
     Py_DECREF(s);
+
     return t;
 }
 
 static int zset_score_from_py(PyObject *obj, double *out) {
+
     double score = PyFloat_AsDouble(obj);
+
     if (PyErr_Occurred()) return 0;
     if (isnan(score)) {
         PyErr_SetString(PyExc_ValueError, "score is not a valid float");
         return 0;
     }
     *out = score;
+
     return 1;
 }
 
@@ -97,8 +120,10 @@ static int zset_add(zset *zs, sds member, double score, int nx, int xx,
     dict_replace(zs->dict, member, &score);
     zsl_insert(zs->zsl, score, sds_dup(member));
     *added = 1;
+
     return 1;
 }
+
 
 static int zset_delete_member(zset *zs, sds member) {
     double *score = dict_fetch_value(zs->dict, member);

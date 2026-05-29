@@ -8,17 +8,22 @@
 static sds sds_alloc(size_t len, size_t alloc) {
     sdshdr *hdr = bufpool_alloc(sizeof(sdshdr) + alloc + 1);
     if (!hdr) return NULL;
-    hdr->len   = (uint32_t)len;
+    hdr->len = (uint32_t)len;
     hdr->alloc = (uint32_t)alloc;
     return hdr->buf;
 }
 
+
 sds sds_newlen(const void *init, size_t initlen) {
     sds s = sds_alloc(initlen, initlen);
+
     if (!s) return NULL;
+
     if (init && initlen)
         memcpy(s, init, initlen);
+
     s[initlen] = '\0';
+
     return s;
 }
 

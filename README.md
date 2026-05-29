@@ -1,28 +1,37 @@
 # Credish
 
-Credish is a Redis-compatible, in-process cache for Python. It exposes a
+Credish is a Redis-compatible, in-process cache for Python. It provides a
 `redis-py`-style client backed by a native C extension, so applications can use
 familiar Redis commands without running a separate Redis server process.
 
-The project is currently early-stage. Strings, lists, sorted sets, key expiry,
-logical databases, and persistence are the main supported areas.
+Credish is currently early-stage. The main supported areas are strings, lists,
+sorted sets, key expiry, logical databases, and local persistence.
 
-## Features
+## Why Credish?
 
-- In-process cache with a small Python API and native C storage engine
-- Redis-like commands for strings, lists, sorted sets, keys, and expiry
+- In-process cache with no Redis server process to manage
+- Native C storage engine exposed through a small Python API
+- Redis-like commands for common strings, lists, sorted sets, keys, and expiry
 - Logical database selection with indexes `0` through `15`
-- Persistence modes: `none`, `rdb`, `aof`, and `hybrid`
-- Context-manager client for clean native resource handling
+- Persistence modes for no persistence, RDB snapshots, AOF logs, or both
+- Context-manager client support for clean native resource handling
 - Python 3.10+ packaging with editable installs and wheel build support
 
 ## Installation
 
 Credish builds a C extension, so you need Python 3.10 or newer and a C compiler.
 
-For local development:
+Install from PyPI:
 
 ```bash
+python -m pip install credish
+```
+
+For local development, install the package in editable mode with development
+dependencies:
+
+```bash
+cd credish
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
@@ -31,6 +40,7 @@ python -m pip install -e ".[dev]"
 On Windows PowerShell:
 
 ```powershell
+cd credish
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -67,7 +77,7 @@ with CredishClient(data_dir="./data", persistence="hybrid") as client:
     ]
 ```
 
-By default, Redis-style read methods return `bytes`. Use `get(..., native=True)`
+Redis-style read methods return `bytes` by default. Use `get(..., native=True)`
 to decode values that were stored from supported Python types such as `str`,
 `int`, `float`, `bool`, `None`, lists, or dictionaries.
 
@@ -96,6 +106,8 @@ client = CredishClient(
 Prefer using `CredishClient` as a context manager:
 
 ```python
+from credish import CredishClient
+
 with CredishClient() as client:
     client.set("ready", "yes")
 ```
@@ -104,29 +116,65 @@ with CredishClient() as client:
 
 Implemented command groups include:
 
-- Server: `ping`, `flushdb`, `dbsize`, `select`, `save`, `bgsave`
-- Keys and expiry: `delete`, `exists`, `expire`, `pexpire`, `persist`, `ttl`,
-  `pttl`, `type`
-- Strings: `set`, `get`, `incr`, `incrby`, `decr`, `decrby`
-- Lists: `lpush`, `rpush`, `lrange`, `llen`
-- Sorted sets: `zadd`, `zrange`, `zrevrange`, `zrank`, `zrevrank`, `zscore`,
-  `zrem`, `zcard`, `zrangebyscore`, `zincrby`
+| Group | Commands |
+| --- | --- |
+| Server | `ping`, `flushdb`, `dbsize`, `select`, `save`, `bgsave` |
+| Keys and expiry | `delete`, `exists`, `expire`, `pexpire`, `persist`, `ttl`, `pttl`, `type` |
+| Strings | `set`, `get`, `incr`, `incrby`, `decr`, `decrby` |
+| Lists | `lpush`, `rpush`, `lrange`, `llen` |
+| Sorted sets | `zadd`, `zrange`, `zrevrange`, `zrank`, `zrevrank`, `zscore`, `zrem`, `zcard`, `zrangebyscore`, `zincrby` |
 
 Some Python wrapper methods are present ahead of their C extension exports. See
 [Errors and Limitations](docs/errors-and-limitations.md) for the current gaps.
 
-## Testing
+## Persistence
 
-Run the unit tests with:
+Credish can store data in the configured `data_dir` using:
+
+| Mode | Behavior |
+| --- | --- |
+| `none` | Keep data only in memory. |
+| `rdb` | Use point-in-time snapshots. |
+| `aof` | Append write operations to an AOF log. |
+| `hybrid` | Use both RDB snapshots and AOF logging. |
+
+The generated files are named `credish.rdb` and `credish.aof`.
+
+## Project Status
+
+Credish is not a network Redis server and does not implement the Redis protocol.
+It is designed as an embedded cache with Redis-like command semantics for common
+workflows.
+
+Current limitations:
+
+- Hash and set command groups are planned but not currently implemented in the C
+  extension.
+- Several Redis string and list wrappers exist in Python before their C
+  extension counterparts.
+- Redis compatibility focuses on common command behavior, not complete Redis
+  server behavior.
+
+See [Errors and Limitations](docs/errors-and-limitations.md) for more detail.
+
+## Development
+
+Run the unit tests:
 
 ```bash
 pytest tests/unit
 ```
 
-Run the full suite, including stress tests:
+Run the full test suite, including stress tests:
 
 ```bash
 pytest
+```
+
+Build a source distribution and wheel:
+
+```bash
+python -m build
 ```
 
 ## Documentation
@@ -140,4 +188,5 @@ pytest
 
 ## License
 
-Credish is licensed under the MIT License.
+Credish is licensed under the GNU Lesser General Public License v3.0 or later.
+

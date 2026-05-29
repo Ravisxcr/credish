@@ -8,11 +8,13 @@
 #include <time.h>
 #include <errno.h>
 
-/* ------------------------------------------------------------------ */
-/* dictType for key space: SDS keys, credishObject* values            */
-/* ------------------------------------------------------------------ */
 
-static void obj_val_free(void *v)   { obj_free((credishObject *)v); }
+// dictType for key space: SDS keys, credishObject* values     
+
+
+static void obj_val_free(void *v) { 
+    obj_free((credishObject *)v); 
+}
 
 static dictType keyspace_type = {
     .hash     = dict_hash_sds,
@@ -24,12 +26,16 @@ static dictType keyspace_type = {
 };
 
 /* dictType for expires: SDS keys, int64_t* values */
-static void expires_val_free(void *v) { free(v); }
+static void expires_val_free(void *v) { 
+    free(v); 
+}
+
 static void *expires_val_dup(void *v) {
     int64_t *p = malloc(sizeof(int64_t));
     if (p) *p = *(int64_t *)v;
     return p;
 }
+
 static dictType expires_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
@@ -39,18 +45,19 @@ static dictType expires_type = {
     .val_free = expires_val_free,
 };
 
-/* ------------------------------------------------------------------ */
-/* Store lifecycle                                                     */
-/* ------------------------------------------------------------------ */
+
+// Store lifecycle                                      
+
 
 credish_store *store_open(const credish_config *cfg) {
+
     credish_store *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
     s->cfg = *cfg;
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
-        s->dbs[i].id      = i;
-        s->dbs[i].keys    = dict_create(&keyspace_type);
+        s->dbs[i].id = i;
+        s->dbs[i].keys = dict_create(&keyspace_type);
         s->dbs[i].expires = dict_create(&expires_type);
     }
 
@@ -70,10 +77,13 @@ credish_store *store_open(const credish_config *cfg) {
     expire_sweep_start(s);
 
     s->last_save_time = (int64_t)time(NULL);
+
     return s;
 }
 
+
 void store_close(credish_store *s) {
+
     expire_sweep_stop(s);
 
     /* Final RDB save */
@@ -92,13 +102,15 @@ void store_close(credish_store *s) {
         dict_free(s->dbs[i].keys);
         dict_free(s->dbs[i].expires);
     }
+
     credish_rwlock_destroy(&s->lock);
+
     free(s);
 }
 
-/* ------------------------------------------------------------------ */
-/* DB accessors                                                        */
-/* ------------------------------------------------------------------ */
+
+// DB accessors                                                      
+
 
 credish_db *store_select_db(credish_store *s, int db_id) {
     if (db_id < 0 || db_id >= CREDISH_DB_COUNT) return NULL;
@@ -108,6 +120,7 @@ credish_db *store_select_db(credish_store *s, int db_id) {
 static int64_t now_ms(void) {
     return credish_now_ms();
 }
+
 
 int db_is_expired(credish_db *db, const char *key, int keylen) {
     sds tmp = sds_newlen(key, (size_t)keylen);

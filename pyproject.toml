@@ -8,7 +8,7 @@ version = "0.0.2"
 description = "Redis-compatible in-process cache as a Python C extension"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "LGPL-3.0-or-later" }
 
 [project.optional-dependencies]
 dev = ["cibuildwheel", "pytest", "pytest-timeout"]
@@ -34,3 +34,4 @@ archs = ["auto"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+
