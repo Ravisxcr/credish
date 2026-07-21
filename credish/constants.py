@@ -16,8 +16,4 @@ class AOF_FSYNC(str, Enum):
     NO = "no"
 
 
-# Backwards-compatible typo alias for early examples.
-PRESISTENCE = PERSISTENCE
-
-
-__all__ = ["PERSISTENCE", "PRESISTENCE", "AOF_FSYNC"]
+__all__ = ["PERSISTENCE", "AOF_FSYNC"]

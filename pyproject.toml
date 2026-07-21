@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 
+[project.urls]
+Homepage = "https://github.com/Ravisxcr/credish"
+Repository = "https://github.com/Ravisxcr/credish"
+Documentation = "https://github.com/Ravisxcr/credish/tree/main/docs"
+Issues = "https://github.com/Ravisxcr/credish/issues"
+
 [project.optional-dependencies]
 dev = ["cibuildwheel", "pytest", "pytest-timeout"]
 
@@ -34,3 +40,4 @@ archs = ["auto"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+
