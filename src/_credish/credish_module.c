@@ -1,10 +1,6 @@
 /*
  * credish_module.c — Python C extension entry point.
- *
- * Exposes a PyCapsule wrapping credish_store* as the "db handle"
- * passed to every operation.  All heavy lifting is in C; the GIL is
- * released (Py_BEGIN_ALLOW_THREADS) around pure-C read/write operations.
- */
+*/
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -22,47 +18,48 @@
 #include <time.h>
 #include "platform.h"
 
-
-// Capsule
-
 #define CAPSULE_NAME "credish._credish.store"
 
-/* Non-NULL sentinel stored in a capsule after py_close() is called,
-   preventing use-after-free on double-close. */
 static int g_closed_sentinel;
 
-static void store_capsule_destructor(PyObject *cap) {
-    credish_store *s = PyCapsule_GetPointer(cap, CAPSULE_NAME);
-    if (s && s != (credish_store *)&g_closed_sentinel) store_close(s);
+static void store_capsule_destructor(PyObject *capsule) {
+    credish_store *store = PyCapsule_GetPointer(capsule, CAPSULE_NAME);
+    if (store && store != (credish_store *)&g_closed_sentinel) 
+        store_close(store);
 }
 
 
 // Helper
 
 credish_store *credish_get_store(PyObject *handle) {
-    credish_store *s = PyCapsule_GetPointer(handle, CAPSULE_NAME);
-    if (!s && PyTuple_Check(handle) && PyTuple_GET_SIZE(handle) == 2) {
+    credish_store *store = PyCapsule_GetPointer(handle, CAPSULE_NAME);
+    if (!store && PyTuple_Check(handle) && PyTuple_GET_SIZE(handle) == 2) {
         PyErr_Clear();
-        s = PyCapsule_GetPointer(PyTuple_GET_ITEM(handle, 0), CAPSULE_NAME);
+        store = PyCapsule_GetPointer(PyTuple_GET_ITEM(handle, 0), CAPSULE_NAME);
     }
-    if (!s || s == (credish_store *)&g_closed_sentinel) return NULL;
-    return s;
+    if (!store || store == (credish_store *)&g_closed_sentinel) 
+        return NULL;
+    return store;
 }
 
 static int get_db_id(PyObject *handle) {
     if (PyTuple_Check(handle) && PyTuple_GET_SIZE(handle) == 2) {
         long db_id = PyLong_AsLong(PyTuple_GET_ITEM(handle, 1));
         if (PyErr_Occurred()) return -1;
-        return (int)db_id;
+            return (int)db_id;
     }
     return 0;
 }
 
-credish_db *credish_get_db(PyObject *handle, credish_store *s) {
-    if (!PyTuple_Check(handle)) return &s->dbs[0];
+credish_db *credish_get_db(PyObject *handle, credish_store *store) {
+    if (!PyTuple_Check(handle)) 
+        return &store->dbs[0];
+    
     int db_id = get_db_id(handle);
-    credish_db *db = store_select_db(s, db_id);
-    if (!db) PyErr_SetString(PyExc_ValueError, "db index out of range");
+    credish_db *db = store_select_db(store, db_id);
+    
+    if (!db) 
+        PyErr_SetString(PyExc_ValueError, "db index out of range");
     return db;
 }
 
@@ -88,25 +85,28 @@ static int decode_key(PyObject *obj, char **out, int *out_len) {
 }
 
 /* Coerce any Python value to an sds (for SET value, LPUSH members, etc.) */
-static sds pyobj_to_sds(PyObject *obj) {
-    if (PyBytes_Check(obj))
-        return sds_newlen(PyBytes_AS_STRING(obj), (size_t)PyBytes_GET_SIZE(obj));
-    if (PyUnicode_Check(obj)) {
-        Py_ssize_t sz;
-        const char *s = PyUnicode_AsUTF8AndSize(obj, &sz);
-        return s ? sds_newlen(s, (size_t)sz) : NULL;
+static sds pyobj_to_sds(PyObject *object) {
+    if (PyBytes_Check(object))
+        return sds_newlen(
+            PyBytes_AS_STRING(object),
+            (size_t)PyBytes_GET_SIZE(object)
+        );
+    if (PyUnicode_Check(object)) {
+        Py_ssize_t utf8_len;
+        const char *utf8_str = PyUnicode_AsUTF8AndSize(object, &utf8_len);
+        return utf8_str ? sds_newlen(utf8_str, (size_t)utf8_len) : NULL;
     }
-    if (PyLong_Check(obj)) {
-        long long v = PyLong_AsLongLong(obj);
-        char buf[24];
-        int n = snprintf(buf, sizeof(buf), "%lld", v);
-        return sds_newlen(buf, (size_t)n);
+    if (PyLong_Check(object)) {
+        long long int_value = PyLong_AsLongLong(object);
+        char int_buf[24];
+        int int_len = snprintf(int_buf, sizeof(int_buf), "%lld", int_value);
+        return sds_newlen(int_buf, (size_t)int_value);
     }
-    if (PyFloat_Check(obj)) {
-        double v = PyFloat_AS_DOUBLE(obj);
-        char buf[32];
-        int n = snprintf(buf, sizeof(buf), "%.17g", v);
-        return sds_newlen(buf, (size_t)n);
+    if (PyFloat_Check(object)) {
+        double float_value = PyFloat_AS_DOUBLE(object);
+        char float_buf[32];
+        int float_len = snprintf(float_buf, sizeof(float_buf), "%.17g", float_value);
+        return sds_newlen(float_buf, (size_t)float_len);
     }
     PyErr_SetString(PyExc_TypeError, "value must be str, bytes, int, or float");
     return NULL;
@@ -120,7 +120,7 @@ static int64_t now_ms_mod(void) {
 // Open / Close
 
 
-static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kw) {
+static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void)self;
     static char *kwlist[] = {"data_dir","persistence","save_interval","aof_fsync","db",NULL};
     const char *data_dir = ".";
@@ -129,7 +129,7 @@ static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kw) {
     const char *aof_fsync = "everysec";
     int db_id = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "|ssisi", kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ssisi", kwlist,
             &data_dir, &persistence, &save_interval, &aof_fsync, &db_id))
         return NULL;
 
@@ -139,10 +139,11 @@ static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kw) {
     cfg.save_interval = save_interval;
     cfg.aof_fsync = parse_aof_fsync(aof_fsync);
 
-    credish_store *s = store_open(&cfg);
-    if (!s) return PyErr_NoMemory();
+    credish_store *store = store_open(&cfg);
+    if (!store) 
+        return PyErr_NoMemory();
 
-    return PyCapsule_New(s, CAPSULE_NAME, store_capsule_destructor);
+    return PyCapsule_New(store, CAPSULE_NAME, store_capsule_destructor);
 }
 
 
@@ -151,13 +152,15 @@ static PyObject *py_close(PyObject *self, PyObject *args) {
     (void)self;
     PyObject *handle;
 
-    if (!PyArg_ParseTuple(args, "O", &handle)) return NULL;
+    if (!PyArg_ParseTuple(args, "O", &handle)) 
+        return NULL;
 
-    credish_store *s = get_store(handle);
-    if (!s) return NULL;
+    credish_store *store = get_store(handle);
+    if (!store) 
+        return NULL;
 
     Py_BEGIN_ALLOW_THREADS
-    store_close(s);
+    store_close(store);
     Py_END_ALLOW_THREADS
 
     /* Invalidate the capsule so the destructor doesn't double-free */
@@ -175,7 +178,8 @@ static PyObject *py_ping(PyObject *self, PyObject *args) {
     (void)self;
     PyObject *handle;
 
-    if (!PyArg_ParseTuple(args,"O",&handle)) return NULL;
+    if (!PyArg_ParseTuple(args,"O",&handle)) 
+        return NULL;
 
     return PyUnicode_FromString("PONG");
 }
@@ -186,19 +190,22 @@ static PyObject *py_flushdb(PyObject *self, PyObject *args) {
     (void)self;
     PyObject *handle;
 
-    if (!PyArg_ParseTuple(args, "O", &handle)) return NULL;
-    credish_store *s = get_store(handle); if (!s) return NULL;
+    if (!PyArg_ParseTuple(args, "O", &handle)) 
+        return NULL;
+    credish_store *store = get_store(handle);
+    if (!store) 
+        return NULL;
 
     Py_BEGIN_ALLOW_THREADS
-    credish_rwlock_wrlock(&s->lock);
+    credish_rwlock_wrlock(&store->lock);
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
-        dict_free(s->dbs[i].keys);
-        dict_free(s->dbs[i].expires);
+        dict_free(store->dbs[i].keys);
+        dict_free(store->dbs[i].expires);
         /* dict_create requires dictType — re-init deferred; just wipe used */
     }
 
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     Py_END_ALLOW_THREADS
 
     Py_RETURN_TRUE;
@@ -211,19 +218,23 @@ static PyObject *py_dbsize(PyObject *self, PyObject *args) {
     PyObject *handle;
     int db_id = -1;
 
-    if (!PyArg_ParseTuple(args, "O|i", &handle, &db_id)) return NULL;
+    if (!PyArg_ParseTuple(args, "O|i", &handle, &db_id))
+        return NULL;
 
-    credish_store *s = get_store(handle); if (!s) return NULL;
+    credish_store *store = get_store(handle); 
+    if (!store) 
+        return NULL;
 
     if (db_id < 0) db_id = get_db_id(handle);
 
-    credish_db *db = store_select_db(s, db_id);
+    credish_db *db = store_select_db(store, db_id);
     
-    if (!db) return PyLong_FromLong(0);
+    if (!db) 
+        return PyLong_FromLong(0);
 
-    credish_rwlock_rdlock(&s->lock);
+    credish_rwlock_rdlock(&store->lock);
     size_t sz = dict_size(db->keys);
-    credish_rwlock_rdunlock(&s->lock);
+    credish_rwlock_rdunlock(&store->lock);
 
     return PyLong_FromSsize_t((Py_ssize_t)sz);
 }
@@ -1028,8 +1039,6 @@ static PyMethodDef credish_methods[] = {
     {"zcard",    py_zcard,               METH_VARARGS,               NULL},
     {"zrangebyscore", (PyCFunction)py_zrangebyscore, METH_VARARGS|METH_KEYWORDS, NULL},
     {"zincrby",  py_zincrby,             METH_VARARGS,               NULL},
-    /* Remaining commands (incr/decr, hset/hget, sadd, …)
-     * follow the same pattern — stubs to be filled in Phase 2. */
     {NULL, NULL, 0, NULL}
 };
 

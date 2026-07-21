@@ -1,5 +1,9 @@
 # Credish
 
+[![PyPI version](https://img.shields.io/pypi/v/credish.svg)](https://pypi.org/project/credish/)
+[![Python versions](https://img.shields.io/pypi/pyversions/credish.svg)](https://pypi.org/project/credish/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Ravisxcr/credish/blob/main/LICENSE)
+
 Credish is a Redis-compatible, in-process cache for Python. It provides a
 `redis-py`-style client backed by a native C extension, so applications can use
 familiar Redis commands without running a separate Redis server process.
@@ -125,7 +129,7 @@ Implemented command groups include:
 | Sorted sets | `zadd`, `zrange`, `zrevrange`, `zrank`, `zrevrank`, `zscore`, `zrem`, `zcard`, `zrangebyscore`, `zincrby` |
 
 Some Python wrapper methods are present ahead of their C extension exports. See
-[Errors and Limitations](docs/errors-and-limitations.md) for the current gaps.
+[Errors and Limitations](https://github.com/Ravisxcr/credish/blob/main/docs/errors-and-limitations.md) for the current gaps.
 
 ## Persistence
 
@@ -155,7 +159,7 @@ Current limitations:
 - Redis compatibility focuses on common command behavior, not complete Redis
   server behavior.
 
-See [Errors and Limitations](docs/errors-and-limitations.md) for more detail.
+See [Errors and Limitations](https://github.com/Ravisxcr/credish/blob/main/docs/errors-and-limitations.md) for more detail.
 
 ## Development
 
@@ -179,14 +183,14 @@ python -m build
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md)
-- [API Reference](docs/api-reference.md)
-- [Persistence and Expiry](docs/persistence-and-expiry.md)
-- [Internals](docs/internals.md)
-- [Errors and Limitations](docs/errors-and-limitations.md)
-- [Development](docs/development.md)
+- [Getting Started](https://github.com/Ravisxcr/credish/blob/main/docs/getting-started.md)
+- [API Reference](https://github.com/Ravisxcr/credish/blob/main/docs/api-reference.md)
+- [Persistence and Expiry](https://github.com/Ravisxcr/credish/blob/main/docs/persistence-and-expiry.md)
+- [Internals](https://github.com/Ravisxcr/credish/blob/main/docs/internals.md)
+- [Errors and Limitations](https://github.com/Ravisxcr/credish/blob/main/docs/errors-and-limitations.md)
+- [Development](https://github.com/Ravisxcr/credish/blob/main/docs/development.md)
 
 ## License
 
-Credish is licensed under the GNU Lesser General Public License v3.0 or later.
+Credish is licensed under the MIT License. See [LICENSE](https://github.com/Ravisxcr/credish/blob/main/LICENSE) for details.
 

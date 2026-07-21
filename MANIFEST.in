@@ -1,2 +1,3 @@
+include LICENSE
 include src/_credish/*.h
 include src/_credish/persistence/*.h
