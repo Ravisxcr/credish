@@ -27,19 +27,19 @@ typedef struct __attribute__((packed)) sdshdr {
 #pragma pack(pop)
 #endif
 
-#define SDS_HDR(s)  ((sdshdr *)((s) - sizeof(sdshdr)))
-#define SDS_LEN(s)  (SDS_HDR(s)->len)
-#define SDS_AVAIL(s) (SDS_HDR(s)->alloc - SDS_HDR(s)->len)
+#define SDS_HDR(str)  ((sdshdr *)((str) - sizeof(sdshdr)))
+#define SDS_LEN(str)  (SDS_HDR(str)->len)
+#define SDS_AVAIL(str) (SDS_HDR(str)->alloc - SDS_HDR(str)->len)
 
 sds   sds_new(const char *init, size_t initlen);
 sds   sds_newlen(const void *init, size_t initlen);
 sds   sds_empty(void);
-sds   sds_dup(const sds s);
-void  sds_free(sds s);
-sds   sds_cat(sds s, const char *t, size_t len);
-sds   sds_catprintf(sds s, const char *fmt, ...);
+sds   sds_dup(const sds str);
+void  sds_free(sds str);
+sds   sds_cat(sds dest, const char *data, size_t len);
+sds   sds_catprintf(sds dest, const char *fmt, ...);
 int   sds_cmp(const sds a, const sds b);
-void  sds_clear(sds s);
-sds   sds_grow(sds s, size_t addlen);
+void  sds_clear(sds str);
+sds   sds_grow(sds str, size_t addlen);
 
 #endif /* CREDISH_SDS_H */

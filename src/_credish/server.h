@@ -23,7 +23,7 @@ typedef struct credish_config {
     aof_fsync_t    aof_fsync;
 } credish_config;
 
-persist_mode_t  parse_persist_mode(const char *s);
-aof_fsync_t     parse_aof_fsync(const char *s);
+persist_mode_t  parse_persist_mode(const char *name);
+aof_fsync_t     parse_aof_fsync(const char *name);
 
 #endif /* CREDISH_SERVER_H */

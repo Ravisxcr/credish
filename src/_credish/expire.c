@@ -59,30 +59,30 @@ static void sweep_db(credish_db *db, unsigned int *seed) {
 }
 
 static void *sweep_thread_fn(void *arg) {
-    credish_store *s = (credish_store *)arg;
-    unsigned int seed = (unsigned int)(uintptr_t)s ^ (unsigned int)time(NULL);
-    while (s->sweep_running) {
+    credish_store *store = (credish_store *)arg;
+    unsigned int seed = (unsigned int)(uintptr_t)store ^ (unsigned int)time(NULL);
+    while (store->sweep_running) {
         credish_sleep_ms(SWEEP_INTERVAL_MS);
-        credish_rwlock_wrlock(&s->lock);
+        credish_rwlock_wrlock(&store->lock);
         for (int i = 0; i < CREDISH_DB_COUNT; i++)
-            sweep_db(&s->dbs[i], &seed);
-        credish_rwlock_wrunlock(&s->lock);
+            sweep_db(&store->dbs[i], &seed);
+        credish_rwlock_wrunlock(&store->lock);
     }
     return NULL;
 }
 
-void expire_sweep_start(credish_store *s) {
-    s->sweep_running = 1;
-    s->sweep_thread_started =
-        credish_thread_create(&s->sweep_thread, sweep_thread_fn, s) == 0;
-    if (!s->sweep_thread_started)
-        s->sweep_running = 0;
+void expire_sweep_start(credish_store *store) {
+    store->sweep_running = 1;
+    store->sweep_thread_started =
+        credish_thread_create(&store->sweep_thread, sweep_thread_fn, store) == 0;
+    if (!store->sweep_thread_started)
+        store->sweep_running = 0;
 }
 
-void expire_sweep_stop(credish_store *s) {
-    s->sweep_running = 0;
-    if (s->sweep_thread_started) {
-        credish_thread_join(s->sweep_thread);
-        s->sweep_thread_started = 0;
+void expire_sweep_stop(credish_store *store) {
+    store->sweep_running = 0;
+    if (store->sweep_thread_started) {
+        credish_thread_join(store->sweep_thread);
+        store->sweep_thread_started = 0;
     }
 }

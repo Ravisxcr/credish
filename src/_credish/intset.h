@@ -11,9 +11,9 @@ typedef struct intset {
 } intset;
 
 intset *intset_create(void);
-void    intset_free(intset *s);
-int     intset_add(intset *s, int64_t value);
-int     intset_remove(intset *s, int64_t value);
-int     intset_find(const intset *s, int64_t value);
+void    intset_free(intset *set);
+int     intset_add(intset *set, int64_t value);
+int     intset_remove(intset *set, int64_t value);
+int     intset_find(const intset *set, int64_t value);
 
 #endif /* CREDISH_INTSET_H */

@@ -28,16 +28,16 @@ static void aof_path(char *buf, size_t len, const char *data_dir) {
     snprintf(buf, len, "%s/credish.aof", data_dir);
 }
 
-int aof_open(credish_store *s) {
+int aof_open(credish_store *store) {
     char path[600];
-    aof_path(path, sizeof(path), s->cfg.data_dir);
-    s->aof_fp = fopen(path, "ab");
-    if (s->aof_fp) {
-        s->aof_buf = malloc(AOF_WRITE_BUFFER_SIZE);
-        if (s->aof_buf)
-            setvbuf(s->aof_fp, s->aof_buf, _IOFBF, AOF_WRITE_BUFFER_SIZE);
+    aof_path(path, sizeof(path), store->config.data_dir);
+    store->aof_file = fopen(path, "ab");
+    if (store->aof_file) {
+        store->aof_write_buf = malloc(AOF_WRITE_BUFFER_SIZE);
+        if (store->aof_write_buf)
+            setvbuf(store->aof_file, store->aof_write_buf, _IOFBF, AOF_WRITE_BUFFER_SIZE);
     }
-    return s->aof_fp ? 0 : -1;
+    return store->aof_file ? 0 : -1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -71,9 +71,9 @@ static char *read_bulk(FILE *f, size_t *out_len) {
  * Only mutating commands are stored in the AOF, so we implement
  * a minimal replay-only dispatcher here.
  */
-static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_t *argv_lens) {
+static void replay_cmd(credish_store *store, int db_id, int argc, char **argv, size_t *argv_lens) {
     if (argc < 1) return;
-    credish_db *db = store_select_db(s, db_id);
+    credish_db *db = store_select_db(store, db_id);
     if (!db) return;
     char *cmd = argv[0];
 
@@ -89,7 +89,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
             }
         }
         credishObject *o = obj_create_string_encoded(argv[2], (int)argv_lens[2], encoding);
-        db_set(db, argv[1], (int)argv_lens[1], o, s);
+        db_set(db, argv[1], (int)argv_lens[1], o, store);
         /* optional EX/PX */
         for (int i = 3; i + 1 < argc; i++) {
             if (credish_strcasecmp(argv[i], "EX") == 0) {
@@ -106,7 +106,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
         }
     } else if (credish_strcasecmp(cmd, "DEL") == 0) {
         for (int i = 1; i < argc; i++)
-            db_del(db, argv[i], (int)argv_lens[i], s);
+            db_del(db, argv[i], (int)argv_lens[i], store);
     } else if (credish_strcasecmp(cmd, "EXPIRE") == 0) {
         ARGC_MIN(3);
         int64_t sec = atoll(argv[2]);
@@ -135,13 +135,13 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
         val += strtoll(argv[2], NULL, 10);
         char buf[24]; int blen = snprintf(buf, sizeof(buf), "%lld", val);
         credishObject *new_o = obj_create_string(buf, blen);
-        if (new_o) db_set(db, argv[1], (int)argv_lens[1], new_o, s);
+        if (new_o) db_set(db, argv[1], (int)argv_lens[1], new_o, store);
     } else if (credish_strcasecmp(cmd, "RPUSH") == 0) {
         ARGC_MIN(3);
         credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_list();
-            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, store);
         }
         if (o && o->type == OBJ_LIST) {
             adlist *l = (adlist *)o->ptr;
@@ -155,7 +155,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
         credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_list();
-            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, store);
         }
         if (o && o->type == OBJ_LIST) {
             adlist *l = (adlist *)o->ptr;
@@ -169,7 +169,7 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
         credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
         if (!o) {
             o = obj_create_zset();
-            if (o) db_set(db, argv[1], (int)argv_lens[1], o, s);
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, store);
         }
         if (o && o->type == OBJ_ZSET) {
             zset *zs = (zset *)o->ptr;
@@ -209,9 +209,9 @@ static void replay_cmd(credish_store *s, int db_id, int argc, char **argv, size_
 /* Load                                                                 */
 /* ------------------------------------------------------------------ */
 
-int aof_load(credish_store *s) {
+int aof_load(credish_store *store) {
     char path[600];
-    aof_path(path, sizeof(path), s->cfg.data_dir);
+    aof_path(path, sizeof(path), store->config.data_dir);
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
     char *replay_buf = malloc(AOF_REPLAY_BUFFER_SIZE);
@@ -242,7 +242,7 @@ int aof_load(credish_store *s) {
             /* The first "argv[0]" is the command; track SELECT for db_id */
             if (n >= 2 && credish_strcasecmp(argv[0], "SELECT") == 0)
                 db_id = atoi(argv[1]);
-            replay_cmd(s, db_id, n, argv, argv_lens);
+            replay_cmd(store, db_id, n, argv, argv_lens);
         }
         for (int i = 0; i < n; i++) free(argv[i]);
         free(argv_lens);
@@ -258,7 +258,7 @@ int aof_load(credish_store *s) {
 /* Background fsync (everysec policy)                                  */
 /* ------------------------------------------------------------------ */
 
-void aof_fsync_bg(credish_store *s) {
-    if (s->aof_fp && s->cfg.aof_fsync == AOF_FSYNC_EVERYSEC)
-        fflush(s->aof_fp);
+void aof_fsync_bg(credish_store *store) {
+    if (store->aof_file && store->config.aof_fsync == AOF_FSYNC_EVERYSEC)
+        fflush(store->aof_file);
 }

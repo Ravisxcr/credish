@@ -151,7 +151,7 @@ PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw) {
         return NULL;
     }
 
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
@@ -182,21 +182,21 @@ PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw) {
     }
 
     int result = 0;
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_zset();
-        if (o) db_set(db, key, keylen, o, s);
+        if (o) db_set(db, key, keylen, o, store);
     } else if (o->type != OBJ_ZSET) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         for (Py_ssize_t i = 0; i < count; i++) sds_free(members[i]);
         free(members); free(scores); free(applied);
         PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
         return NULL;
     }
     if (!o) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         for (Py_ssize_t i = 0; i < count; i++) sds_free(members[i]);
         free(members); free(scores); free(applied);
         return PyErr_NoMemory();
@@ -209,14 +209,14 @@ PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw) {
             result += ch ? (added || changed) : added;
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
 
     for (Py_ssize_t i = 0; i < count; i++) {
         if (applied[i]) {
             char scorebuf[64];
             snprintf(scorebuf, sizeof(scorebuf), "%.17g", scores[i]);
             const char *aof_argv[] = { key, scorebuf, members[i] };
-            aof_append(s, "ZADD", 3, aof_argv);
+            aof_append(store, "ZADD", 3, aof_argv);
         }
         sds_free(members[i]);
     }
@@ -232,19 +232,19 @@ static PyObject *py_zrange_common(PyObject *self, PyObject *args, PyObject *kw, 
     if (!PyArg_ParseTupleAndKeywords(args, kw, "OOii|b", kwlist,
             &handle, &key_obj, &start, &stop, &withscores))
         return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
     if (!o) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         return PyList_New(0);
     }
     if (o->type != OBJ_ZSET) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
         return NULL;
     }
@@ -272,7 +272,7 @@ static PyObject *py_zrange_common(PyObject *self, PyObject *args, PyObject *kw, 
             }
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     return result;
 }
 
@@ -288,20 +288,20 @@ static PyObject *py_zrank_common(PyObject *self, PyObject *args, int reverse) {
     (void)self;
     PyObject *handle, *key_obj, *member_obj;
     if (!PyArg_ParseTuple(args, "OOO", &handle, &key_obj, &member_obj)) return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     sds member = pyobj_to_sds(member_obj);
     if (!member) return NULL;
 
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result = Py_None;
     Py_INCREF(result);
     if (o) {
         if (o->type != OBJ_ZSET) {
-            credish_rwlock_wrunlock(&s->lock);
+            credish_rwlock_wrunlock(&store->lock);
             sds_free(member);
             Py_DECREF(result);
             PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
@@ -317,7 +317,7 @@ static PyObject *py_zrank_common(PyObject *self, PyObject *args, int reverse) {
                 : PyLong_FromUnsignedLong(rank - 1);
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     sds_free(member);
     return result;
 }
@@ -334,20 +334,20 @@ PyObject *py_zscore(PyObject *self, PyObject *args) {
     (void)self;
     PyObject *handle, *key_obj, *member_obj;
     if (!PyArg_ParseTuple(args, "OOO", &handle, &key_obj, &member_obj)) return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     sds member = pyobj_to_sds(member_obj);
     if (!member) return NULL;
 
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
     PyObject *result = Py_None;
     Py_INCREF(result);
     if (o) {
         if (o->type != OBJ_ZSET) {
-            credish_rwlock_wrunlock(&s->lock);
+            credish_rwlock_wrunlock(&store->lock);
             sds_free(member);
             Py_DECREF(result);
             PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
@@ -359,7 +359,7 @@ PyObject *py_zscore(PyObject *self, PyObject *args) {
             result = PyFloat_FromDouble(*score);
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     sds_free(member);
     return result;
 }
@@ -369,7 +369,7 @@ PyObject *py_zrem(PyObject *self, PyObject *args) {
     PyObject *handle, *key_obj, *members_list;
     if (!PyArg_ParseTuple(args, "OOO", &handle, &key_obj, &members_list)) return NULL;
     if (!PyList_Check(members_list)) { PyErr_SetString(PyExc_TypeError, "expected list"); return NULL; }
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
@@ -390,12 +390,12 @@ PyObject *py_zrem(PyObject *self, PyObject *args) {
     }
 
     int removed = 0;
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (o) {
         if (o->type != OBJ_ZSET) {
-            credish_rwlock_wrunlock(&s->lock);
+            credish_rwlock_wrunlock(&store->lock);
             for (Py_ssize_t i = 0; i < n; i++) sds_free(members[i]);
             free(members); free(removed_flags);
             PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
@@ -407,12 +407,12 @@ PyObject *py_zrem(PyObject *self, PyObject *args) {
             removed += removed_flags[i];
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
 
     for (Py_ssize_t i = 0; i < n; i++) {
         if (removed_flags[i]) {
             const char *aof_argv[] = { key, members[i] };
-            aof_append(s, "ZREM", 2, aof_argv);
+            aof_append(store, "ZREM", 2, aof_argv);
         }
         sds_free(members[i]);
     }
@@ -424,22 +424,22 @@ PyObject *py_zcard(PyObject *self, PyObject *args) {
     (void)self;
     PyObject *handle, *key_obj;
     if (!PyArg_ParseTuple(args, "OO", &handle, &key_obj)) return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
     size_t sz = 0;
     if (o) {
         if (o->type != OBJ_ZSET) {
-            credish_rwlock_wrunlock(&s->lock);
+            credish_rwlock_wrunlock(&store->lock);
             PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
             return NULL;
         }
         sz = ((zset *)o->ptr)->zsl->length;
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     return PyLong_FromSsize_t((Py_ssize_t)sz);
 }
 
@@ -454,19 +454,19 @@ PyObject *py_zrangebyscore(PyObject *self, PyObject *args, PyObject *kw) {
     double min_score, max_score;
     if (!zset_score_from_py(min_obj, &min_score) || !zset_score_from_py(max_obj, &max_score))
         return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
 
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
     if (!o) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         return PyList_New(0);
     }
     if (o->type != OBJ_ZSET) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
         return NULL;
     }
@@ -481,7 +481,7 @@ PyObject *py_zrangebyscore(PyObject *self, PyObject *args, PyObject *kw) {
             x = x->level[0].forward;
         }
     }
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
     return result;
 }
 
@@ -491,27 +491,27 @@ PyObject *py_zincrby(PyObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "OOOO", &handle, &key_obj, &amount_obj, &member_obj)) return NULL;
     double amount;
     if (!zset_score_from_py(amount_obj, &amount)) return NULL;
-    credish_store *s = credish_get_store(handle); if (!s) return NULL;
+    credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
     sds member = pyobj_to_sds(member_obj);
     if (!member) return NULL;
 
     double new_score;
-    credish_rwlock_wrlock(&s->lock);
-    credish_db *db = credish_get_db(handle, s);
+    credish_rwlock_wrlock(&store->lock);
+    credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup_write(db, key, keylen);
     if (!o) {
         o = obj_create_zset();
-        if (o) db_set(db, key, keylen, o, s);
+        if (o) db_set(db, key, keylen, o, store);
     } else if (o->type != OBJ_ZSET) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         sds_free(member);
         PyErr_SetString(PyExc_TypeError, "WRONGTYPE");
         return NULL;
     }
     if (!o) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         sds_free(member);
         return PyErr_NoMemory();
     }
@@ -519,19 +519,19 @@ PyObject *py_zincrby(PyObject *self, PyObject *args) {
     double *oldp = dict_fetch_value(zs->dict, member);
     new_score = (oldp ? *oldp : 0.0) + amount;
     if (isnan(new_score)) {
-        credish_rwlock_wrunlock(&s->lock);
+        credish_rwlock_wrunlock(&store->lock);
         sds_free(member);
         PyErr_SetString(PyExc_ValueError, "score is not a valid float");
         return NULL;
     }
     int added = 0, changed = 0;
     zset_add(zs, member, new_score, 0, 0, 0, 0, &added, &changed);
-    credish_rwlock_wrunlock(&s->lock);
+    credish_rwlock_wrunlock(&store->lock);
 
     char scorebuf[64];
     snprintf(scorebuf, sizeof(scorebuf), "%.17g", new_score);
     const char *aof_argv[] = { key, scorebuf, member };
-    aof_append(s, "ZADD", 3, aof_argv);
+    aof_append(store, "ZADD", 3, aof_argv);
     sds_free(member);
     return PyFloat_FromDouble(new_score);
 }
