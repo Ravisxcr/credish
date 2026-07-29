@@ -1,6 +1,8 @@
 # API Reference
 
-This page documents the command surface currently backed by the C extension.
+This page documents the command surface currently backed by the C extension,
+plus the `session()`/`client()` helpers, which are Python-level wrappers over
+the same store handle rather than separate C commands.
 
 ## Server Commands
 
@@ -51,6 +53,29 @@ Triggers a background RDB snapshot.
 
 ```python
 client.bgsave()
+```
+
+### `session(db: int | None = None) -> CredishClient`
+
+Returns another `CredishClient` that shares the same underlying native store
+(no new store is opened) but tracks its own selected logical database. This
+mirrors opening multiple `redis-py` clients against one server. Closing a
+session obtained this way does not close the underlying store; only the
+client that originally opened it does that.
+
+```python
+main = CredishClient()
+worker = main.session(db=1)
+worker.set("key", "value")   # written to db 1
+main.get("key")               # None — main is still on db 0
+```
+
+### `client(db: int | None = None) -> CredishClient`
+
+`redis-py`-style alias for `session()`.
+
+```python
+client.client(db=2)
 ```
 
 ## Key and Expiry Commands
@@ -129,7 +154,13 @@ client.type("leaders")
 
 ### `set(key, value, ex=None, px=None, nx=False, xx=False) -> bool | None`
 
-Stores a string value. `value` may be `str`, `bytes`, `int`, or `float`.
+Stores a value under `key`. `value` may be `bytes`, `bytearray`,
+`memoryview`, `str`, `int`, `float`, `bool`, `None`, or a JSON-compatible
+`list`/`dict` (values nested inside a `list`/`dict` must themselves be
+JSON-compatible, and any `dict` keys must be `str`). Non-`bytes` values are
+tagged with an encoding on write so `get(key, native=True)` (below) can decode
+them back to their original Python type. Any other value type (e.g. a
+`tuple` or an arbitrary object) raises `DataError`.
 
 Options:
 
@@ -145,14 +176,27 @@ the command returns `None`.
 client.set("name", "credish")
 client.set("lock", "1", ex=30, nx=True)
 client.set("existing", "new-value", xx=True)
+client.set("profile", {"name": "ann", "age": 30})
 ```
 
-### `get(key: str) -> bytes | None`
+### `get(key, native=False) -> Any`
 
-Returns a value as `bytes`, or `None` if the key is missing.
+Returns the stored value as `bytes`, or `None` if the key is missing.
+
+With `native=True`, the value is decoded back to the Python type it was
+stored as (`str`, `int`, `float`, or a JSON-decoded `list`/`dict`/`bool`/
+`None`); values written as plain `bytes` are returned unchanged.
 
 ```python
-client.get("name")
+client.set("name", "credish")
+client.get("name")                 # b"credish"
+
+client.set("count", 3)
+client.get("count")                # b"3"
+client.get("count", native=True)   # 3
+
+client.set("profile", {"name": "ann"})
+client.get("profile", native=True) # {"name": "ann"}
 ```
 
 ### `incrby(key: str, amount: int) -> int`

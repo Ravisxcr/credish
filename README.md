@@ -23,7 +23,9 @@ sorted sets, key expiry, logical databases, and local persistence.
 
 ## Installation
 
-Credish builds a C extension, so you need Python 3.10 or newer and a C compiler.
+Credish builds a C extension, so you need Python 3.10 or newer and a C
+compiler. On Linux and macOS the compiler must support POSIX threads; on
+Windows, native threading APIs are used instead.
 
 Install from PyPI:
 

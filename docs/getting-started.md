@@ -3,7 +3,8 @@
 ## Installation
 
 Credish builds a native C extension, so you need Python 3.10 or newer and a C
-compiler with POSIX threads support.
+compiler. On Linux and macOS the compiler must support POSIX threads; on
+Windows, native threading APIs are used instead.
 
 For local development:
 
