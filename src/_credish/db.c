@@ -51,70 +51,70 @@ static dictType expires_type = {
 
 credish_store *store_open(const credish_config *cfg) {
 
-    credish_store *s = calloc(1, sizeof(*s));
-    if (!s) return NULL;
-    s->cfg = *cfg;
+    credish_store *store = calloc(1, sizeof(*store));
+    if (!store) return NULL;
+    store->config = *cfg;
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
-        s->dbs[i].id = i;
-        s->dbs[i].keys = dict_create(&keyspace_type);
-        s->dbs[i].expires = dict_create(&expires_type);
+        store->dbs[i].id = i;
+        store->dbs[i].keys = dict_create(&keyspace_type);
+        store->dbs[i].expires = dict_create(&expires_type);
     }
 
-    credish_rwlock_init(&s->lock);
+    credish_rwlock_init(&store->lock);
 
     /* Load persisted data */
     if (cfg->persist_mode == PERSIST_AOF || cfg->persist_mode == PERSIST_HYBRID)
-        aof_load(s);
+        aof_load(store);
     else if (cfg->persist_mode == PERSIST_RDB)
-        rdb_load(s);
+        rdb_load(store);
 
     /* Open AOF for appending */
     if (cfg->persist_mode == PERSIST_AOF || cfg->persist_mode == PERSIST_HYBRID)
-        aof_open(s);
+        aof_open(store);
 
     /* Start active expiry sweep */
-    expire_sweep_start(s);
+    expire_sweep_start(store);
 
-    s->last_save_time = (int64_t)time(NULL);
+    store->last_save_time = (int64_t)time(NULL);
 
-    return s;
+    return store;
 }
 
 
-void store_close(credish_store *s) {
+void store_close(credish_store *store) {
 
-    expire_sweep_stop(s);
+    expire_sweep_stop(store);
 
     /* Final RDB save */
-    if (s->cfg.persist_mode == PERSIST_RDB || s->cfg.persist_mode == PERSIST_HYBRID)
-        rdb_save(s);
+    if (store->config.persist_mode == PERSIST_RDB || store->config.persist_mode == PERSIST_HYBRID)
+        rdb_save(store);
 
-    if (s->aof_fp) {
-        fflush(s->aof_fp);
-        fclose(s->aof_fp);
-        s->aof_fp = NULL;
+    if (store->aof_file) {
+        fflush(store->aof_file);
+        fclose(store->aof_file);
+        store->aof_file = NULL;
     }
-    free(s->aof_buf);
-    s->aof_buf = NULL;
+    free(store->aof_write_buf);
+    store->aof_write_buf = NULL;
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
-        dict_free(s->dbs[i].keys);
-        dict_free(s->dbs[i].expires);
+        dict_free(store->dbs[i].keys);
+        dict_free(store->dbs[i].expires);
     }
 
-    credish_rwlock_destroy(&s->lock);
+    credish_rwlock_destroy(&store->lock);
 
-    free(s);
+    free(store);
 }
 
 
-// DB accessors                                                      
+// DB accessors
 
 
-credish_db *store_select_db(credish_store *s, int db_id) {
+credish_db *store_select_db(credish_store *store, int db_id) {
     if (db_id < 0 || db_id >= CREDISH_DB_COUNT) return NULL;
-    return &s->dbs[db_id];
+    return &store->dbs[db_id];
 }
 
 static int64_t now_ms(void) {
@@ -155,16 +155,16 @@ credishObject *db_lookup_write(credish_db *db, const char *key, int keylen) {
 }
 
 int db_set(credish_db *db, const char *key, int keylen,
-           credishObject *val, credish_store *s) {
-    (void)s;
+           credishObject *val, credish_store *store) {
+    (void)store;
     sds k = sds_newlen(key, (size_t)keylen);
     int rc = dict_replace(db->keys, k, val);
     sds_free(k);
     return rc;
 }
 
-int db_del(credish_db *db, const char *key, int keylen, credish_store *s) {
-    (void)s;
+int db_del(credish_db *db, const char *key, int keylen, credish_store *store) {
+    (void)store;
     sds tmp = sds_newlen(key, (size_t)keylen);
     int rc  = dict_delete(db->keys, tmp);
     dict_delete(db->expires, tmp);
@@ -195,9 +195,9 @@ void db_remove_expire(credish_db *db, const char *key, int keylen) {
 /* AOF command append                                                  */
 /* ------------------------------------------------------------------ */
 
-void aof_append_len(credish_store *s, const char *cmd, int argc,
+void aof_append_len(credish_store *store, const char *cmd, int argc,
                     const char **argv, const size_t *argv_lens) {
-    if (!s->aof_fp) return;
+    if (!store->aof_file) return;
     /* RESP-like inline format: *N\r\n$len\r\ndata\r\n... */
     size_t cmdlen = strlen(cmd);
     size_t total = (size_t)snprintf(NULL, 0, "*%d\r\n", argc + 1);
@@ -223,19 +223,19 @@ void aof_append_len(credish_store *s, const char *cmd, int argc,
         memcpy(p, "\r\n", 2); p += 2;
     }
 
-    fwrite(record, 1, (size_t)(p - record), s->aof_fp);
+    fwrite(record, 1, (size_t)(p - record), store->aof_file);
     free(record);
 
-    if (s->cfg.aof_fsync == AOF_FSYNC_ALWAYS)
-        fflush(s->aof_fp);
+    if (store->config.aof_fsync == AOF_FSYNC_ALWAYS)
+        fflush(store->aof_file);
 }
 
-void aof_append(credish_store *s, const char *cmd, int argc, const char **argv) {
-    if (!s->aof_fp) return;
+void aof_append(credish_store *store, const char *cmd, int argc, const char **argv) {
+    if (!store->aof_file) return;
     size_t *argv_lens = malloc((size_t)argc * sizeof(size_t));
     if (!argv_lens) return;
     for (int i = 0; i < argc; i++)
         argv_lens[i] = strlen(argv[i]);
-    aof_append_len(s, cmd, argc, argv, argv_lens);
+    aof_append_len(store, cmd, argc, argv, argv_lens);
     free(argv_lens);
 }

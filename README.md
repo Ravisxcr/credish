@@ -23,7 +23,9 @@ sorted sets, key expiry, logical databases, and local persistence.
 
 ## Installation
 
-Credish builds a C extension, so you need Python 3.10 or newer and a C compiler.
+Credish builds a C extension, so you need Python 3.10 or newer and a C
+compiler. On Linux and macOS the compiler must support POSIX threads; on
+Windows, native threading APIs are used instead.
 
 Install from PyPI:
 
@@ -59,9 +61,9 @@ python setup.py build_ext --inplace
 ## Quick Start
 
 ```python
-from credish import CredishClient
+from credish import CredishClient, PERSISTENCE
 
-with CredishClient(data_dir="./data", persistence="hybrid") as client:
+with CredishClient(data_dir="./data", persistence=PERSISTENCE.HYBRID) as client:
     assert client.ping() == "PONG"
 
     client.set("name", "credish")

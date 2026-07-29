@@ -6,7 +6,7 @@
 #include "db.h"
 
 credish_store *credish_get_store(PyObject *handle);
-credish_db *credish_get_db(PyObject *handle, credish_store *s);
+credish_db *credish_get_db(PyObject *handle, credish_store *store);
 
 PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_zrange(PyObject *self, PyObject *args, PyObject *kw);
@@ -17,6 +17,6 @@ PyObject *py_zscore(PyObject *self, PyObject *args);
 PyObject *py_zrem(PyObject *self, PyObject *args);
 PyObject *py_zcard(PyObject *self, PyObject *args);
 PyObject *py_zrangebyscore(PyObject *self, PyObject *args, PyObject *kw);
-PyObject *py_(PyObject *self, PyObject *args);
+PyObject *py_zincrby(PyObject *self, PyObject *args);
 
 #endif /* CREDISH_SORTED_SET_H */

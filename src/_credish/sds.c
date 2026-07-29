@@ -15,16 +15,16 @@ static sds sds_alloc(size_t len, size_t alloc) {
 
 
 sds sds_newlen(const void *init, size_t initlen) {
-    sds s = sds_alloc(initlen, initlen);
+    sds str = sds_alloc(initlen, initlen);
 
-    if (!s) return NULL;
+    if (!str) return NULL;
 
     if (init && initlen)
-        memcpy(s, init, initlen);
+        memcpy(str, init, initlen);
 
-    s[initlen] = '\0';
+    str[initlen] = '\0';
 
-    return s;
+    return str;
 }
 
 sds sds_new(const char *init, size_t initlen) {
@@ -35,26 +35,26 @@ sds sds_empty(void) {
     return sds_newlen("", 0);
 }
 
-sds sds_dup(const sds s) {
-    return sds_newlen(s, SDS_LEN(s));
+sds sds_dup(const sds str) {
+    return sds_newlen(str, SDS_LEN(str));
 }
 
-void sds_free(sds s) {
-    if (!s) return;
-    sdshdr *hdr = SDS_HDR(s);
+void sds_free(sds str) {
+    if (!str) return;
+    sdshdr *hdr = SDS_HDR(str);
     bufpool_free(hdr, sizeof(sdshdr) + hdr->alloc + 1);
 }
 
-void sds_clear(sds s) {
-    SDS_HDR(s)->len = 0;
-    s[0] = '\0';
+void sds_clear(sds str) {
+    SDS_HDR(str)->len = 0;
+    str[0] = '\0';
 }
 
-sds sds_grow(sds s, size_t addlen) {
-    sdshdr *hdr = SDS_HDR(s);
+sds sds_grow(sds str, size_t addlen) {
+    sdshdr *hdr = SDS_HDR(str);
     size_t cur_alloc = hdr->alloc;
     size_t needed    = hdr->len + addlen;
-    if (cur_alloc >= needed) return s;
+    if (cur_alloc >= needed) return str;
     size_t new_alloc = cur_alloc ? cur_alloc : 1;
     while (new_alloc < needed) new_alloc *= 2;
     /* Can't realloc a pool-owned slab: alloc new, copy, free old. */
@@ -66,24 +66,24 @@ sds sds_grow(sds s, size_t addlen) {
     return new_hdr->buf;
 }
 
-sds sds_cat(sds s, const char *t, size_t len) {
-    size_t cur_len = SDS_LEN(s);
-    s = sds_grow(s, len);
-    if (!s) return NULL;
-    memcpy(s + cur_len, t, len);
-    SDS_HDR(s)->len = (uint32_t)(cur_len + len);
-    s[cur_len + len] = '\0';
-    return s;
+sds sds_cat(sds dest, const char *data, size_t len) {
+    size_t cur_len = SDS_LEN(dest);
+    dest = sds_grow(dest, len);
+    if (!dest) return NULL;
+    memcpy(dest + cur_len, data, len);
+    SDS_HDR(dest)->len = (uint32_t)(cur_len + len);
+    dest[cur_len + len] = '\0';
+    return dest;
 }
 
-sds sds_catprintf(sds s, const char *fmt, ...) {
+sds sds_catprintf(sds dest, const char *fmt, ...) {
     va_list ap;
     char buf[1024];
     va_start(ap, fmt);
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    if (n < 0) return s;
-    return sds_cat(s, buf, (size_t)n < sizeof(buf) ? (size_t)n : sizeof(buf) - 1);
+    if (n < 0) return dest;
+    return sds_cat(dest, buf, (size_t)n < sizeof(buf) ? (size_t)n : sizeof(buf) - 1);
 }
 
 int sds_cmp(const sds a, const sds b) {

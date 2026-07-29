@@ -18,15 +18,24 @@ credish._credish C extension
   |
   +-- store / DB layer        src/_credish/db.c
   +-- object layer            src/_credish/object.c
-  +-- data structures         dict, sds, adlist, skiplist
+  +-- data structures         dict, sds, adlist, skiplist, intset
   +-- memory allocator        bufpool
   +-- expiry worker           expire
-  +-- persistence             rdb, aof
+  +-- persistence             src/_credish/persistence/{rdb,aof}.c
+  +-- cross-platform shims    platform.h
+  +-- command exports         credish_module.c, sorted_set.c
 ```
 
 The Python client keeps an opaque native handle returned by `_credish.open()`.
 That handle is a Python capsule wrapping a `credish_store *`. Public methods in
 `CredishClient` forward to C functions with this handle.
+
+`platform.h` isolates every OS-specific primitive (rwlocks, mutexes,
+one-time init, threads, monotonic time, sleep, and `fsync`) behind a
+`credish_*` prefix, backed by pthreads on Linux/macOS and by `SRWLOCK`,
+`CRITICAL_SECTION`, and `_beginthreadex` on Windows. The rest of the codebase
+(db.c, expire.c, bufpool.c, persistence) is written against these shims
+instead of pthreads directly, which is what lets Credish build on Windows.
 
 ## Store Lifecycle
 
@@ -35,34 +44,50 @@ The central native type is `credish_store` in `src/_credish/db.h`:
 ```c
 typedef struct credish_store {
     credish_db      dbs[CREDISH_DB_COUNT];
-    credish_config  cfg;
-    pthread_rwlock_t lock;
+    credish_config  config;
+    credish_rwlock_t lock;
 
-    FILE   *aof_fp;
-    int64_t aof_seq;
-    int64_t last_save_time;
+    /* AOF */
+    FILE   *aof_file;
+    char   *aof_write_buf;
+    int64_t aof_sequence;
 
-    pthread_t sweep_thread;
+    /* RDB */
+    int64_t last_save_time;  /* unix seconds */
+
+    /* Active expiry sweep thread */
+    credish_thread_t sweep_thread;
+    int       sweep_thread_started;
     int       sweep_running;
 } credish_store;
 ```
+
+`credish_config` (`src/_credish/server.h`) holds the data directory, the
+persistence mode (`none`, `rdb`, `aof`, `hybrid`), the RDB save interval, and
+the AOF fsync policy (`always`, `everysec`, `no`).
 
 Opening a store:
 
 1. Allocates and initializes a `credish_store`.
 2. Creates 16 logical databases.
 3. Initializes the global read/write lock.
-4. Loads persisted state from AOF or RDB depending on configuration.
-5. Opens the AOF file when append-only persistence is enabled.
+4. Loads persisted state: AOF replay for `aof`/`hybrid` mode, RDB load for
+   `rdb` mode.
+5. Opens the AOF file (buffered with a 1 MB write buffer) when append-only
+   persistence is enabled.
 6. Starts the active expiry sweep thread.
 
 Closing a store:
 
 1. Stops the expiry sweep thread.
 2. Writes a final RDB snapshot for `rdb` or `hybrid` modes.
-3. Flushes and closes AOF.
+3. Flushes and closes AOF, and frees the AOF write buffer.
 4. Frees all DB dictionaries and objects.
 5. Destroys the store lock.
+
+`bgsave` does not fork like Redis; `rdb_bgsave()` (`persistence/rdb.c`) takes
+the store's read lock and runs `rdb_save()` on a detached background thread
+instead.
 
 ## Database Layout
 
@@ -87,10 +112,11 @@ Every stored value is wrapped in a `credishObject`:
 
 ```c
 typedef struct credishObject {
-    int type;
+    int   type;
+    int   encoding;
     union {
-        void   *ptr;
-        int64_t ival;
+        void           *ptr;   /* string (sds), or pointer to container */
+        int64_t         ival;  /* small integer optimisation            */
     };
 } credishObject;
 ```
@@ -108,6 +134,29 @@ Type tags match Redis-style type numbers:
 Strings are binary-safe SDS values. Lists are doubly linked lists. Sorted sets
 combine a dictionary and skip list so Credish can support both fast member
 lookup and ordered range traversal.
+
+An integer-optimised set encoding, `intset` (`src/_credish/intset.c`), exists
+in the tree as a placeholder for future `OBJ_SET` storage but is not yet wired
+into `obj_create_set()` or the RDB/AOF formats.
+
+### String Encoding
+
+`encoding` only carries meaning for `OBJ_STRING` values. It records what
+Python type a raw byte string round-trips to:
+
+| Encoding tag | Value | Python type |
+| --- | ---: | --- |
+| `OBJ_ENCODING_RAW` | `0` | `bytes` |
+| `OBJ_ENCODING_JSON` | `1` | JSON-serializable object (`dict`, `list`, ...) |
+| `OBJ_ENCODING_STR` | `2` | `str` |
+| `OBJ_ENCODING_INT` | `3` | `int` |
+| `OBJ_ENCODING_FLOAT` | `4` | `float` |
+
+`CredishClient` encodes non-`bytes` values before calling `set()` and passes
+the matching tag as `value_encoding`; `get()` uses the stored tag to decode
+the value back to its original Python type. The tag is persisted alongside
+the value in RDB (since format version 2) and appended to AOF `SET` records
+as a trailing `FMT <tag>` argument, so a reload preserves the original type.
 
 ## Buffer Pool and Pages
 
@@ -158,7 +207,7 @@ typedef struct {
     char           *bump;
     char           *end;
     page           *pages;
-    pthread_mutex_t lock;
+    credish_mutex_t lock;
 } slab;
 ```
 
@@ -177,7 +226,8 @@ Field meanings:
 
 `bufpool_alloc(size)` works like this:
 
-1. Initialize the global pool once with `pthread_once()`.
+1. Initialize the global pool once with `credish_once()` (`pthread_once()` on
+   Linux/macOS, `InitOnceExecuteOnce()` on Windows).
 2. Find the smallest size class that can hold `size`.
 3. If the request is too large, call `malloc(size)`.
 4. Lock the selected slab.
@@ -314,39 +364,51 @@ Lazy expiry happens during lookup:
 2. If expired, the key is deleted from both `keys` and `expires`.
 3. The lookup returns `NULL`, so the key behaves as missing.
 
-Active expiry is handled by a background thread in `expire.c`:
+Active expiry is handled by a background thread in `expire.c`, using a
+sampling approach modeled on Redis rather than a full-table scan:
 
-- Wakes every 100 ms.
-- Takes the store write lock.
-- Scans each database's `expires` dictionary.
-- Deletes up to 20 expired keys per database per pass.
+- Wakes every 100 ms (`SWEEP_INTERVAL_MS`) and takes the store write lock.
+- For each database, repeatedly samples up to 20 keys (`SWEEP_SAMPLE_SIZE`)
+  from a random offset in the `expires` dictionary and deletes the ones past
+  their deadline.
+- Keeps resampling the same database (up to `SWEEP_MAX_LOOPS` = 16 rounds per
+  cycle) as long as at least 25% of the sampled keys were expired
+  (`SWEEP_STOP_NUM` / `SWEEP_STOP_DEN`) — this is the signal that more expired
+  keys are likely still present.
+- Moves on once a round comes back mostly clean, or the database's `expires`
+  dictionary empties out.
 
-The active worker prevents forgotten expired keys from accumulating when they
-are not read again.
+Sampling instead of a full scan keeps sweep cost roughly constant regardless
+of how many keys a database holds, while the resample-on-high-hit-rate rule
+still clears large batches of expired keys quickly after, e.g., a bulk
+`EXPIRE`.
 
 ## Persistence
 
-Credish has two persistence implementations.
+Credish has two persistence implementations, both under
+`src/_credish/persistence/`.
 
 ### RDB
 
-RDB writes a binary snapshot to `credish.rdb`. The file contains:
+`rdb.c` writes a binary snapshot to `credish.rdb`. The file contains:
 
 ```text
-CREDISH_RDB\n
-version
-db sections
-key records
-EOF marker
-crc32 checksum
+"CREDISH_RDB\n"        magic (12 bytes)
+version                uint8, currently 2
+db sections            0xFE, db_id (uint32), key_count (uint32), then records
+  key records            type (uint8), key (len-prefixed), has_expire (uint8),
+                         [expire_ms (int64)], encoding (uint8, v2+),
+                         type-specific value payload
+EOF marker             0xFF
+crc32 checksum         uint32, CRC-32/IEEE over everything above
 ```
 
-Each key record stores:
-
-- object type
-- key length and bytes
-- optional expiry deadline
-- type-specific value payload
+`rdb_save()` writes to a `.tmp` file, fsyncs it and its parent directory, then
+atomically renames it over `credish.rdb`. `rdb_load()` accepts both version 1
+files (no per-key encoding byte, treated as `OBJ_ENCODING_RAW`) and version 2.
+`rdb_bgsave()` runs `rdb_save()` on a detached thread under the store's read
+lock rather than forking, since Credish is a library embedded in the caller's
+process.
 
 RDB supports strings, lists, hashes, sets, and sorted sets at the serialization
 layer, though not every command group is currently exported through the public C
@@ -354,49 +416,64 @@ module.
 
 ### AOF
 
-AOF writes mutating commands to `credish.aof` using a RESP-like format:
+`aof.c` writes mutating commands to `credish.aof` using an inline, RESP-like
+format:
 
 ```text
-*<argc>
-$<len>
-<command>
-$<len>
-<arg>
+*<argc>\r\n
+$<len>\r\n
+<command>\r\n
+$<len>\r\n
+<arg>\r\n
 ...
 ```
 
-On startup, AOF is parsed and replayed through a minimal replay dispatcher. This
-reconstructs the database by applying stored mutations in order.
+The write file handle is opened in append mode with a 1 MB `setvbuf()` buffer.
+String `SET` commands append the encoding tag as a trailing `FMT <tag>`
+argument so replay can restore the value's Python-level type (see
+[String Encoding](#string-encoding)).
+
+On startup, AOF is parsed and replayed through `replay_cmd()`, a minimal
+dispatcher that only understands the mutating commands Credish actually
+appends (`SET`, `DEL`, `EXPIRE`, `PERSIST`, `SELECT`, `FLUSHDB`, `INCRBY`,
+`LPUSH`, `RPUSH`, `ZADD`, `ZREM`). `SELECT` records track which logical
+database subsequent commands in the file apply to.
 
 The fsync behavior is controlled by `aof_fsync`:
 
 | Mode | Behavior |
 | --- | --- |
 | `always` | Flush after each appended command. |
-| `everysec` | Intended periodic flush policy. |
+| `everysec` | Periodic flush via `aof_fsync_bg()`; the function exists but nothing currently calls it on a timer, so this mode presently behaves like `no`. |
 | `no` | Let the OS decide when to flush. |
 
 ## Threading
 
-The store uses a `pthread_rwlock_t`:
+The store uses a `credish_rwlock_t` — `pthread_rwlock_t` on Linux/macOS,
+`SRWLOCK` on Windows, both wrapped by `platform.h`:
 
 - Read operations can take the read lock.
 - Writes take the write lock.
 - The active expiry thread takes the write lock before deleting expired keys.
+- Background RDB save (`rdb_bgsave()`) takes the read lock while it serializes
+  the store on its own thread.
 
-The buffer pool has independent per-slab mutexes. That keeps allocator metadata
-safe without forcing every small allocation through one global mutex.
+The buffer pool has independent per-slab mutexes (`credish_mutex_t`). That
+keeps allocator metadata safe without forcing every small allocation through
+one global mutex.
 
 ## Python Boundary
 
-The C module exports functions through `credish_module.c`. `_credish.open()`
-returns a Python capsule containing `credish_store *`, and the capsule
-destructor closes the store if the user did not call `close()` explicitly.
+The C module exports functions through `credish_module.c` and
+`sorted_set.c` (sorted-set commands are implemented and exported separately).
+`_credish.open()` returns a Python capsule containing `credish_store *`, and
+the capsule destructor closes the store if the user did not call `close()`
+explicitly.
 
 The public `CredishClient` in `credish/client.py` is a thin wrapper. New commands
 usually need changes in three places:
 
-1. C implementation and module export.
+1. C implementation and module export (`credish_module.c` or `sorted_set.c`).
 2. Python wrapper method.
 3. Type stub in `credish/_credish.pyi`.
 

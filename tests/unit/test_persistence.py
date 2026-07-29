@@ -1,5 +1,5 @@
 import pytest
-from credish import AOF_FSYNC, CredishClient, PERSISTENCE, PRESISTENCE
+from credish import AOF_FSYNC, CredishClient, PERSISTENCE
 
 
 def test_rdb_roundtrip(tmp_path):
@@ -16,7 +16,7 @@ def test_persistence_enum_roundtrip(tmp_path):
         c.set("enum_key", "hello")
         c.save()
 
-    with CredishClient(data_dir=str(tmp_path), persistence=PRESISTENCE.RDB) as c:
+    with CredishClient(data_dir=str(tmp_path), persistence=PERSISTENCE.RDB) as c:
         assert c.get("enum_key") == b"hello"
 
 

@@ -46,15 +46,15 @@ void zsl_free(zskiplist *zsl) {
 }
 
 /* Returns 1 if (score1,member1) > (score2,member2) */
-static int node_gt(double s1, sds m1, double s2, sds m2) {
-    if (s1 != s2) return s1 > s2;
-    return sds_cmp(m1, m2) > 0;
+static int node_gt(double score1, sds member1, double score2, sds member2) {
+    if (score1 != score2) return score1 > score2;
+    return sds_cmp(member1, member2) > 0;
 }
 
 /* Returns 1 if (score1,member1) < (score2,member2) */
-static int node_lt(double s1, sds m1, double s2, sds m2) {
-    if (s1 != s2) return s1 < s2;
-    return sds_cmp(m1, m2) < 0;
+static int node_lt(double score1, sds member1, double score2, sds member2) {
+    if (score1 != score2) return score1 < score2;
+    return sds_cmp(member1, member2) < 0;
 }
 
 zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member) {

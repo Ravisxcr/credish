@@ -41,7 +41,7 @@ typedef struct dict {
 } dict;
 
 typedef struct dictIterator {
-    dict      *d;
+    dict      *dictionary;
     int        table;
     long       idx;
     dictEntry *entry;
@@ -50,15 +50,15 @@ typedef struct dictIterator {
 
 /* API */
 dict        *dict_create(dictType *type);
-void         dict_free(dict *d);
-int          dict_add(dict *d, void *key, void *val);
-int          dict_replace(dict *d, void *key, void *val);
-dictEntry   *dict_find(dict *d, const void *key);
-void        *dict_fetch_value(dict *d, const void *key);
-int          dict_delete(dict *d, const void *key);
-size_t       dict_size(const dict *d);
+void         dict_free(dict *dictionary);
+int          dict_add(dict *dictionary, void *key, void *val);
+int          dict_replace(dict *dictionary, void *key, void *val);
+dictEntry   *dict_find(dict *dictionary, const void *key);
+void        *dict_fetch_value(dict *dictionary, const void *key);
+int          dict_delete(dict *dictionary, const void *key);
+size_t       dict_size(const dict *dictionary);
 
-dictIterator *dict_iter_new(dict *d);
+dictIterator *dict_iter_new(dict *dictionary);
 dictEntry    *dict_iter_next(dictIterator *it);
 void          dict_iter_free(dictIterator *it);
 

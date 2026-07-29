@@ -8,49 +8,49 @@
 #include <stdio.h>
 
 credishObject *obj_create_string_encoded(const char *data, int len, int encoding) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_STRING;
-    o->encoding = encoding;
-    o->ptr  = sds_newlen(data, (size_t)len);
-    return o;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_STRING;
+    obj->encoding = encoding;
+    obj->ptr  = sds_newlen(data, (size_t)len);
+    return obj;
 }
 
 credishObject *obj_create_string(const char *data, int len) {
     return obj_create_string_encoded(data, len, OBJ_ENCODING_RAW);
 }
 
-credishObject *obj_steal_string_encoded(sds s, int encoding) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_STRING;
-    o->encoding = encoding;
-    o->ptr  = s;
-    return o;
+credishObject *obj_steal_string_encoded(sds str, int encoding) {
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_STRING;
+    obj->encoding = encoding;
+    obj->ptr  = str;
+    return obj;
 }
 
-credishObject *obj_steal_string(sds s) {
-    return obj_steal_string_encoded(s, OBJ_ENCODING_RAW);
+credishObject *obj_steal_string(sds str) {
+    return obj_steal_string_encoded(str, OBJ_ENCODING_RAW);
 }
 
 credishObject *obj_create_string_int(int64_t val) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_STRING;
-    o->encoding = OBJ_ENCODING_RAW;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_STRING;
+    obj->encoding = OBJ_ENCODING_RAW;
     char buf[22];
     int n = snprintf(buf, sizeof(buf), "%lld", (long long)val);
-    o->ptr = sds_newlen(buf, (size_t)n);
-    return o;
+    obj->ptr = sds_newlen(buf, (size_t)n);
+    return obj;
 }
 
 credishObject *obj_create_list(void) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_LIST;
-    o->encoding = OBJ_ENCODING_RAW;
-    o->ptr  = adlist_create();
-    return o;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_LIST;
+    obj->encoding = OBJ_ENCODING_RAW;
+    obj->ptr  = adlist_create();
+    return obj;
 }
 
 /* dictType for hash objects: SDS keys and SDS values */
@@ -64,12 +64,12 @@ static dictType hash_dict_type = {
 };
 
 credishObject *obj_create_hash(void) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_HASH;
-    o->encoding = OBJ_ENCODING_RAW;
-    o->ptr  = dict_create(&hash_dict_type);
-    return o;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_HASH;
+    obj->encoding = OBJ_ENCODING_RAW;
+    obj->ptr  = dict_create(&hash_dict_type);
+    return obj;
 }
 
 /* dictType for sets: SDS keys, NULL values */
@@ -83,12 +83,12 @@ static dictType set_dict_type = {
 };
 
 credishObject *obj_create_set(void) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
-    o->type = OBJ_SET;
-    o->encoding = OBJ_ENCODING_RAW;
-    o->ptr  = dict_create(&set_dict_type);
-    return o;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
+    obj->type = OBJ_SET;
+    obj->encoding = OBJ_ENCODING_RAW;
+    obj->ptr  = dict_create(&set_dict_type);
+    return obj;
 }
 
 /* dictType for zset score dict: SDS keys, double* values */
@@ -108,51 +108,51 @@ static dictType zset_dict_type = {
 };
 
 credishObject *obj_create_zset(void) {
-    credishObject *o = bufpool_alloc(sizeof(*o));
-    if (!o) return NULL;
+    credishObject *obj = bufpool_alloc(sizeof(*obj));
+    if (!obj) return NULL;
     zset *zs = bufpool_alloc(sizeof(zset));
-    if (!zs) { bufpool_free(o, sizeof(*o)); return NULL; }
+    if (!zs) { bufpool_free(obj, sizeof(*obj)); return NULL; }
     zs->dict = dict_create(&zset_dict_type);
     zs->zsl  = zsl_create();
-    o->type  = OBJ_ZSET;
-    o->encoding = OBJ_ENCODING_RAW;
-    o->ptr   = zs;
-    return o;
+    obj->type  = OBJ_ZSET;
+    obj->encoding = OBJ_ENCODING_RAW;
+    obj->ptr   = zs;
+    return obj;
 }
 
-void obj_free(credishObject *o) {
-    if (!o) return;
-    switch (o->type) {
+void obj_free(credishObject *obj) {
+    if (!obj) return;
+    switch (obj->type) {
     case OBJ_STRING:
-        sds_free((sds)o->ptr);
+        sds_free((sds)obj->ptr);
         break;
     case OBJ_LIST:
-        adlist_free((struct adlist *)o->ptr, (void (*)(void *))sds_free);
+        adlist_free((struct adlist *)obj->ptr, (void (*)(void *))sds_free);
         break;
     case OBJ_HASH:
-        dict_free((dict *)o->ptr);
+        dict_free((dict *)obj->ptr);
         break;
     case OBJ_SET:
-        dict_free((dict *)o->ptr);
+        dict_free((dict *)obj->ptr);
         break;
     case OBJ_ZSET: {
-        zset *zs = (zset *)o->ptr;
+        zset *zs = (zset *)obj->ptr;
         dict_free(zs->dict);
         zsl_free(zs->zsl);
         bufpool_free(zs, sizeof(zset));
         break;
     }
     }
-    bufpool_free(o, sizeof(*o));
+    bufpool_free(obj, sizeof(*obj));
 }
 
-int obj_is_string(const credishObject *o) {
-    return o && o->type == OBJ_STRING;
+int obj_is_string(const credishObject *obj) {
+    return obj && obj->type == OBJ_STRING;
 }
 
-char *obj_string_ptr(const credishObject *o, int *len_out) {
-    if (!o || o->type != OBJ_STRING) return NULL;
-    sds s = (sds)o->ptr;
-    if (len_out) *len_out = (int)SDS_LEN(s);
-    return s;
+char *obj_string_ptr(const credishObject *obj, int *len_out) {
+    if (!obj || obj->type != OBJ_STRING) return NULL;
+    sds str = (sds)obj->ptr;
+    if (len_out) *len_out = (int)SDS_LEN(str);
+    return str;
 }

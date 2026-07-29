@@ -202,11 +202,11 @@ static int save_zset(FILE *f, credishObject *o) {
 /* Save                                                                 */
 /* ------------------------------------------------------------------ */
 
-int rdb_save(credish_store *s) {
+int rdb_save(credish_store *store) {
     char path[600];
-    rdb_path(path, sizeof(path), s->cfg.data_dir);
+    rdb_path(path, sizeof(path), store->config.data_dir);
     char tmp[608];
-    rdb_tmp_path(tmp, sizeof(tmp), s->cfg.data_dir);
+    rdb_tmp_path(tmp, sizeof(tmp), store->config.data_dir);
     remove(tmp);
 
     FILE *f = fopen(tmp, "wb");
@@ -220,7 +220,7 @@ int rdb_save(credish_store *s) {
     if (w_u8(f, RDB_VERSION) != 0) goto fail;
 
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
-        credish_db *db = &s->dbs[i];
+        credish_db *db = &store->dbs[i];
         if (dict_size(db->keys) == 0) continue;
 
         if (w_u8(f, SECTION_DB) != 0 ||
@@ -267,7 +267,7 @@ int rdb_save(credish_store *s) {
     if (fclose(f) != 0) { remove(tmp); return -1; }
     if (rename(tmp, path) != 0) { remove(tmp); return -1; }
     credish_fsync_parent_dir(path);
-    s->last_save_time = (int64_t)time(NULL);
+    store->last_save_time = (int64_t)time(NULL);
     return 0;
 
 fail:
@@ -303,11 +303,11 @@ static sds r_sds(FILE *f) {
     return s;
 }
 
-int rdb_load(credish_store *s) {
+int rdb_load(credish_store *store) {
     char path[600];
-    rdb_path(path, sizeof(path), s->cfg.data_dir);
+    rdb_path(path, sizeof(path), store->config.data_dir);
     char tmp[608];
-    rdb_tmp_path(tmp, sizeof(tmp), s->cfg.data_dir);
+    rdb_tmp_path(tmp, sizeof(tmp), store->config.data_dir);
     remove(tmp);
 
     FILE *f = fopen(path, "rb");
@@ -328,7 +328,7 @@ int rdb_load(credish_store *s) {
 
         int db_id = (int)r_u32(f);
         if (db_id < 0 || db_id >= CREDISH_DB_COUNT) { fclose(f); return -1; }
-        credish_db *db = &s->dbs[db_id];
+        credish_db *db = &store->dbs[db_id];
         uint32_t count = r_u32(f);
 
         for (uint32_t i = 0; i < count; i++) {
@@ -415,16 +415,16 @@ int rdb_load(credish_store *s) {
 /* ------------------------------------------------------------------ */
 
 static void *bgsave_fn(void *arg) {
-    credish_store *s = (credish_store *)arg;
-    credish_rwlock_rdlock(&s->lock);
-    rdb_save(s);
-    credish_rwlock_rdunlock(&s->lock);
+    credish_store *store = (credish_store *)arg;
+    credish_rwlock_rdlock(&store->lock);
+    rdb_save(store);
+    credish_rwlock_rdunlock(&store->lock);
     return NULL;
 }
 
-int rdb_bgsave(credish_store *s) {
+int rdb_bgsave(credish_store *store) {
     credish_thread_t t;
-    if (credish_thread_create(&t, bgsave_fn, s) != 0)
+    if (credish_thread_create(&t, bgsave_fn, store) != 0)
         return -1;
     credish_thread_detach(t);
     return 0;
