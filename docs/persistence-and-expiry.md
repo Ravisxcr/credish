@@ -6,10 +6,10 @@ Credish supports four persistence modes:
 
 | Mode | Description |
 | --- | --- |
-| `"none"` | Pure in-memory mode. Data is discarded when the client closes. |
-| `"rdb"` | Binary snapshot mode. Use `save()` or `bgsave()` to write snapshots. |
-| `"aof"` | Append-only file mode. Mutating commands are logged and replayed. |
-| `"hybrid"` | Combines snapshot and append-only persistence. This is the default. |
+| `PERSISTENCE.NONE` | Pure in-memory mode. Data is discarded when the client closes. |
+| `PERSISTENCE.RDB` | Binary snapshot mode. Use `save()` or `bgsave()` to write snapshots. |
+| `PERSISTENCE.AOF` | Append-only file mode. Mutating commands are logged and replayed. |
+| `PERSISTENCE.HYBRID` | Combines snapshot and append-only persistence. This is the default. |
 
 Persistence files are created under `data_dir`.
 
@@ -17,28 +17,28 @@ Persistence files are created under `data_dir`.
 
 ```python
 from pathlib import Path
-from credish import CredishClient
+from credish import CredishClient, PERSISTENCE
 
 data_dir = Path("./credish-data")
 data_dir.mkdir(exist_ok=True)
 
-with CredishClient(data_dir=str(data_dir), persistence="rdb") as client:
+with CredishClient(data_dir=str(data_dir), persistence=PERSISTENCE.RDB) as client:
     client.set("rdb_key", "hello")
     client.save()
 
-with CredishClient(data_dir=str(data_dir), persistence="rdb") as client:
+with CredishClient(data_dir=str(data_dir), persistence=PERSISTENCE.RDB) as client:
     assert client.get("rdb_key") == b"hello"
 ```
 
 ## AOF Example
 
 ```python
-from credish import CredishClient
+from credish import CredishClient, PERSISTENCE
 
-with CredishClient(data_dir="./credish-data", persistence="aof") as client:
+with CredishClient(data_dir="./credish-data", persistence=PERSISTENCE.AOF) as client:
     client.set("aof_key", "world")
 
-with CredishClient(data_dir="./credish-data", persistence="aof") as client:
+with CredishClient(data_dir="./credish-data", persistence=PERSISTENCE.AOF) as client:
     assert client.get("aof_key") == b"world"
 ```
 

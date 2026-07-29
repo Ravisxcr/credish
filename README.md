@@ -59,9 +59,9 @@ python setup.py build_ext --inplace
 ## Quick Start
 
 ```python
-from credish import CredishClient
+from credish import CredishClient, PERSISTENCE
 
-with CredishClient(data_dir="./data", persistence="hybrid") as client:
+with CredishClient(data_dir="./data", persistence=PERSISTENCE.HYBRID) as client:
     assert client.ping() == "PONG"
 
     client.set("name", "credish")

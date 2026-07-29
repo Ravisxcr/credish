@@ -22,9 +22,9 @@ python setup.py build_ext --inplace
 ## Quick Start
 
 ```python
-from credish import CredishClient
+from credish import CredishClient, PERSISTENCE
 
-with CredishClient(data_dir="./data", persistence="hybrid") as client:
+with CredishClient(data_dir="./data", persistence=PERSISTENCE.HYBRID) as client:
     assert client.ping() == "PONG"
 
     client.set("name", "credish")
@@ -57,11 +57,13 @@ print(status.decode("utf-8"))  # ready
 Create a client with `CredishClient`:
 
 ```python
+from credish import CredishClient, PERSISTENCE, AOF_FSYNC
+
 CredishClient(
     data_dir=".",
-    persistence="hybrid",
+    persistence=PERSISTENCE.HYBRID,
     save_interval=300,
-    aof_fsync="everysec",
+    aof_fsync=AOF_FSYNC.EVERYSEC,
     db=0,
 )
 ```
@@ -69,9 +71,9 @@ CredishClient(
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `data_dir` | `"."` | Directory for persistence files such as `credish.rdb` and `credish.aof`. |
-| `persistence` | `"hybrid"` | Persistence mode: `"none"`, `"rdb"`, `"aof"`, or `"hybrid"`. |
+| `persistence` | `PERSISTENCE.HYBRID` | Persistence mode: `PERSISTENCE.NONE`, `PERSISTENCE.RDB`, `PERSISTENCE.AOF`, or `PERSISTENCE.HYBRID`. |
 | `save_interval` | `300` | Automatic RDB snapshot interval in seconds where applicable. |
-| `aof_fsync` | `"everysec"` | AOF fsync policy: `"always"`, `"everysec"`, or `"no"`. |
+| `aof_fsync` | `AOF_FSYNC.EVERYSEC` | AOF fsync policy: `AOF_FSYNC.ALWAYS`, `AOF_FSYNC.EVERYSEC`, or `AOF_FSYNC.NO`. |
 | `db` | `0` | Initial logical database index. Valid indexes are `0` through `15`. |
 
 The client is a context manager. Prefer `with CredishClient(...) as client:` so
