@@ -55,10 +55,10 @@ pytest tests/unit
 or
 
 ```bash
-make test
+task test
 ```
 
-`make test` runs `pytest tests`, which also picks up `tests/stress/` —
+`task test` runs `pytest tests`, which also picks up `tests/stress/` —
 including a benchmark that drives a million SET/GET ops — so it is slower
 than running `tests/unit` alone. The packaged wheel's own test step
 (`tool.cibuildwheel.test-command` in `pyproject.toml`) likewise only runs
@@ -73,50 +73,42 @@ The unit tests cover:
 - persistence round trips
 - common error conditions
 
-## Makefile Targets
+## Taskfile Targets
 
-Run `make help` for the full list. All targets prefer `.venv/bin/python` if
-it exists, falling back to `python` on `PATH`.
+This project uses [Task](https://taskfile.dev) (`Taskfile.yml`) instead of
+`make` so the same commands work unmodified on Windows, macOS, and Linux.
+Install it once (`winget install Task.Task`, `brew install go-task`, etc.),
+then run `task` or `task --list` for the full list. Every task that runs
+Python depends on `venv`, which creates `.venv` on first use.
 
 | Target | Purpose |
 | --- | --- |
-| `make bootstrap` | Install local packaging tools (`build`, `twine`, `cibuildwheel`). |
-| `make install-dev` | Install this project editable with the `dev` extra (pytest, pytest-timeout, cibuildwheel). |
-| `make test` | Run `pytest tests` (unit + stress). |
-| `make build` | Clean, then build an sdist and wheel into `dist/`. |
-| `make build-wheels` | Clean, then run `cibuildwheel` for the host platform into `dist/`. |
-| `make build-linux-wheels-docker` | Build Linux wheels via Docker into `dist/`. |
-| `make setup-qemu` | Register QEMU emulators for foreign-arch Docker wheel builds. |
-| `make check` | Validate `dist/*` with `twine check`. |
-| `make upload` / `make upload-test` | Upload `dist/*` to PyPI / TestPyPI with twine. |
-| `make clean` | Remove build artifacts, `dist/`, `*.egg-info`, compiled `.so` files, and `__pycache__`. |
+| `task bootstrap` | Install local packaging tools (`build`, `twine`, `cibuildwheel`) into `.venv`. |
+| `task install-dev` | Install this project editable with the `dev` extra (pytest, pytest-timeout, cibuildwheel). |
+| `task test` | Run `pytest tests` (unit + stress). |
+| `task build` | Clean, then build an sdist and wheel into `dist/`. |
+| `task build-wheels` | Clean, then run `cibuildwheel` for the host platform into `dist/`. |
+| `task setup-qemu` | Register QEMU emulators for foreign-arch wheel builds (Linux Docker hosts). |
+| `task check` | Validate `dist/*` with `twine check`. |
+| `task upload` / `task upload-test` | Upload `dist/*` to PyPI / TestPyPI with twine. |
+| `task clean` | Remove build artifacts, `dist/`, `*.egg-info`, and compiled extensions. |
+| `task build-inplace` | Build the C extension in-place into `credish/` for local development. |
 
 ## Building Wheels
 
 Build the configured wheels from the host Python environment:
 
 ```bash
-make build-wheels
+task build-wheels
 ```
 
-Build Linux wheels through Docker and write the wheels to the local `dist/`
-directory using mounted source and output folders:
+By default this builds CPython 3.10 through 3.14 for the host architecture.
+Override the build selector via the usual `cibuildwheel` environment
+variables (`CIBW_BUILD`, `CIBW_ARCHS_LINUX`, etc.) before invoking the task.
+For `aarch64` builds on an `x86_64` Linux host, register QEMU first:
 
 ```bash
-make build-linux-wheels-docker
-```
-
-By default this builds CPython 3.10 through 3.14 for `x86_64`. Override the
-build selector or architecture when needed:
-
-```bash
-CIBW_BUILD="cp312-* cp313-*" CIBW_ARCHS_LINUX="x86_64 aarch64" make build-linux-wheels-docker
-```
-
-For `aarch64` builds on an `x86_64` host, register QEMU first:
-
-```bash
-make setup-qemu
+task setup-qemu
 ```
 
 ## Adding a Command
