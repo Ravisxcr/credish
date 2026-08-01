@@ -230,12 +230,3 @@ void aof_append_len(credish_store *store, const char *cmd, int argc,
         fflush(store->aof_file);
 }
 
-void aof_append(credish_store *store, const char *cmd, int argc, const char **argv) {
-    if (!store->aof_file) return;
-    size_t *argv_lens = malloc((size_t)argc * sizeof(size_t));
-    if (!argv_lens) return;
-    for (int i = 0; i < argc; i++)
-        argv_lens[i] = strlen(argv[i]);
-    aof_append_len(store, cmd, argc, argv, argv_lens);
-    free(argv_lens);
-}

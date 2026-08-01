@@ -96,3 +96,51 @@ def test_persist(client):
     client.expire("p", 100)
     client.persist("p")
     assert client.ttl("p") == -1
+
+
+def test_set_get_binary_safety_and_scale(client):
+    # Binary-safe key and value: embedded NUL bytes and the full byte range.
+    binary_key = b"key\x00with\x00nulls"
+    binary_value = b"\x00lead" + bytes(range(256)) + b"\x00trail\x00"
+    assert client.set(binary_key, binary_value) is True
+    assert client.get(binary_key) == binary_value
+
+    # A value larger than the bufpool's biggest slab class (2048 B), forcing
+    # the sds allocator to fall back to a raw malloc instead of a pooled slab.
+    huge = b"y" * 10_000
+    assert client.set("huge", huge) is True
+    assert client.get("huge") == huge
+
+    # The client wrapper stringifies ints before crossing into C, so
+    # arbitrary-precision Python ints (far outside int64) must round-trip
+    # exactly via native decoding, not just as raw bytes.
+    big = 10**40
+    assert client.set("bignum", big) is True
+    assert client.get("bignum") == str(big).encode()
+    assert client.get("bignum", native=True) == big
+
+    assert client.set("neg", -12345) is True
+    assert client.get("neg", native=True) == -12345
+
+
+def test_set_binary_safety_survives_aof_roundtrip(tmp_path):
+    # The AOF log is a length-prefixed RESP-like format; an embedded NUL
+    # byte in a key or value must not truncate the record.
+    binary_key = b"k\x00ey"
+    binary_value = b"v\x00al" + bytes(range(256))
+    with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
+        assert c.set(binary_key, binary_value) is True
+        assert c.get(binary_key) == binary_value
+
+    with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
+        assert c.get(binary_key) == binary_value
+
+
+def test_incrby_binary_key_survives_aof_roundtrip(tmp_path):
+    binary_key = b"counter\x00with\x00nulls"
+    with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
+        assert c.incrby(binary_key, 5) == 5
+        assert c.incrby(binary_key, 3) == 8
+
+    with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
+        assert c.get(binary_key) == b"8"

@@ -356,6 +356,13 @@ Hashes store field/value pairs under a single key, similar to a Python `dict`
 of `bytes`. See the [Redis hashes documentation](https://redis.io/docs/latest/develop/data-types/hashes/)
 for the general data type semantics.
 
+Each field's *value* (never the field name) is tagged with its original
+Python type (`str`/`bytes`/`int`/`float`) when written by `hset`/`hmset`.
+By default, getters return the raw `bytes` payload as always; pass
+`native=True` to `hget`/`hmget`/`hgetall`/`hvals` to decode each value back
+to its original type instead — mirroring `get(key, native=True)` for
+top-level strings. Field names themselves are always returned as `bytes`.
+
 ### `hset(key, field=None, value=None, mapping=None) -> int`
 
 Sets one field, or multiple fields via `mapping`, and returns the number of
@@ -367,12 +374,15 @@ client.hset("user:1", "name", "ravi")
 client.hset("user:1", mapping={"name": "ravi", "age": 30})
 ```
 
-### `hget(key, field) -> bytes | None`
+### `hget(key, field, native=False) -> Any`
 
-Returns a field's value, or `None` if the field or key is missing.
+Returns a field's value, or `None` if the field or key is missing. With
+`native=True`, decodes the value back to its original `str`/`int`/`float`
+type instead of returning raw `bytes`.
 
 ```python
 client.hget("user:1", "name")
+client.hget("user:1", "age", native=True)  # 30, not b"30"
 ```
 
 ### `hmset(key, mapping) -> bool`
@@ -384,10 +394,10 @@ Sets multiple fields at once. Always returns `True`. Equivalent to
 client.hmset("user:1", {"name": "ravi", "age": 30})
 ```
 
-### `hmget(key, fields) -> list[bytes | None]`
+### `hmget(key, fields, native=False) -> list[Any]`
 
 Returns values for the given fields, in the same order, with `None` for any
-field that is missing.
+field that is missing. `native=True` decodes each value as in `hget`.
 
 ```python
 client.hmget("user:1", ["name", "missing"])
@@ -409,9 +419,11 @@ Returns whether a field exists on the hash.
 client.hexists("user:1", "name")
 ```
 
-### `hgetall(key) -> dict[bytes, bytes]`
+### `hgetall(key, native=False) -> dict[bytes, Any]`
 
 Returns all fields and values as a dict. Returns `{}` for a missing key.
+`native=True` decodes each value as in `hget`; field names (dict keys) are
+always `bytes`.
 
 ```python
 client.hgetall("user:1")
@@ -425,9 +437,10 @@ Returns all field names. Returns `[]` for a missing key.
 client.hkeys("user:1")
 ```
 
-### `hvals(key) -> list[bytes]`
+### `hvals(key, native=False) -> list[Any]`
 
-Returns all values. Returns `[]` for a missing key.
+Returns all values. Returns `[]` for a missing key. `native=True` decodes
+each value as in `hget`.
 
 ```python
 client.hvals("user:1")

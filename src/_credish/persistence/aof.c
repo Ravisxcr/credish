@@ -1,7 +1,7 @@
 /*
  * AOF persistence — append-only command log.
  *
- * Format: RESP-like inline records written by aof_append() in db.c.
+ * Format: RESP-like inline records written by aof_append_len() in db.c.
  * On load, each record is parsed and re-executed against the db layer.
  *
  * Crash recovery:

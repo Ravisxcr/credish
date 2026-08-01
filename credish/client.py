@@ -322,14 +322,14 @@ class CredishClient:
             return _credish.hset(self._db, key, mapping=mapping)
         return _credish.hset(self._db, key, field=field, value=value)
 
-    def hget(self, key: str, field: str) -> Optional[bytes]:
-        return _credish.hget(self._db, key, field)
+    def hget(self, key: str, field: str, native: bool = False) -> Any:
+        return _credish.hget(self._db, key, field, native=native)
 
     def hmset(self, key: str, mapping: dict) -> bool:
         return _credish.hmset(self._db, key, mapping)
 
-    def hmget(self, key: str, fields: list[str]) -> list[Optional[bytes]]:
-        return _credish.hmget(self._db, key, fields)
+    def hmget(self, key: str, fields: list[str], native: bool = False) -> list[Any]:
+        return _credish.hmget(self._db, key, fields, native=native)
 
     def hdel(self, key: str, *fields: str) -> int:
         return _credish.hdel(self._db, key, list(fields))
@@ -337,14 +337,14 @@ class CredishClient:
     def hexists(self, key: str, field: str) -> bool:
         return _credish.hexists(self._db, key, field)
 
-    def hgetall(self, key: str) -> dict[bytes, bytes]:
-        return _credish.hgetall(self._db, key)
+    def hgetall(self, key: str, native: bool = False) -> dict[bytes, Any]:
+        return _credish.hgetall(self._db, key, native=native)
 
     def hkeys(self, key: str) -> list[bytes]:
         return _credish.hkeys(self._db, key)
 
-    def hvals(self, key: str) -> list[bytes]:
-        return _credish.hvals(self._db, key)
+    def hvals(self, key: str, native: bool = False) -> list[Any]:
+        return _credish.hvals(self._db, key, native=native)
 
     def hlen(self, key: str) -> int:
         return _credish.hlen(self._db, key)

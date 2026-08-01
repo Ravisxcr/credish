@@ -62,6 +62,79 @@ static sds pyobj_to_sds(PyObject *obj) {
     return NULL;
 }
 
+/*
+ * Hash *values* (never fields/keys) carry a 1-byte type tag ahead of their
+ * payload — OBJ_ENCODING_{RAW,STR,INT,FLOAT} — so hget/hmget/hgetall/hvals
+ * can hand back the original Python type via native=True. The tag rides
+ * inside the opaque sds content, so it persists through RDB/AOF for free.
+ */
+static sds pyobj_to_tagged_sds(PyObject *obj) {
+    int tag;
+    const char *payload;
+    size_t paylen;
+    char numbuf[32];
+
+    if (PyBytes_Check(obj)) {
+        tag = OBJ_ENCODING_RAW;
+        payload = PyBytes_AS_STRING(obj);
+        paylen = (size_t)PyBytes_GET_SIZE(obj);
+    } else if (PyUnicode_Check(obj)) {
+        Py_ssize_t sz;
+        const char *s = PyUnicode_AsUTF8AndSize(obj, &sz);
+        if (!s) return NULL;
+        tag = OBJ_ENCODING_STR;
+        payload = s;
+        paylen = (size_t)sz;
+    } else if (PyLong_Check(obj)) {
+        long long v = PyLong_AsLongLong(obj);
+        paylen = (size_t)snprintf(numbuf, sizeof(numbuf), "%lld", v);
+        tag = OBJ_ENCODING_INT;
+        payload = numbuf;
+    } else if (PyFloat_Check(obj)) {
+        double v = PyFloat_AS_DOUBLE(obj);
+        paylen = (size_t)snprintf(numbuf, sizeof(numbuf), "%.17g", v);
+        tag = OBJ_ENCODING_FLOAT;
+        payload = numbuf;
+    } else {
+        PyErr_SetString(PyExc_TypeError, "value must be str, bytes, int, or float");
+        return NULL;
+    }
+
+    sds out = sds_newlen(NULL, paylen + 1);
+    if (!out) return NULL;
+    out[0] = (char)tag;
+    if (paylen) memcpy(out + 1, payload, paylen);
+    return out;
+}
+
+/* Strip the leading tag byte and return the raw payload as bytes. */
+static PyObject *tagged_value_to_bytes(sds val) {
+    size_t len = SDS_LEN(val);
+    size_t paylen = len > 0 ? len - 1 : 0;
+    return PyBytes_FromStringAndSize(val + 1, (Py_ssize_t)paylen);
+}
+
+/* Strip the leading tag byte and decode according to it. Values written by
+ * this module always carry a recognised tag; anything else falls back to
+ * bytes, matching the top-level GET(native=True) RAW behaviour. */
+static PyObject *tagged_value_to_native(sds val) {
+    size_t len = SDS_LEN(val);
+    int tag = (unsigned char)val[0];
+    const char *payload = val + 1;
+    Py_ssize_t paylen = (Py_ssize_t)(len > 0 ? len - 1 : 0);
+
+    switch (tag) {
+        case OBJ_ENCODING_STR:
+            return PyUnicode_FromStringAndSize(payload, paylen);
+        case OBJ_ENCODING_INT:
+            return PyLong_FromString(payload, NULL, 10);
+        case OBJ_ENCODING_FLOAT:
+            return PyFloat_FromDouble(strtod(payload, NULL));
+        default:
+            return PyBytes_FromStringAndSize(payload, paylen);
+    }
+}
+
 static void free_sds_array(sds *arr, Py_ssize_t n) {
     if (!arr) return;
     for (Py_ssize_t i = 0; i < n; i++) sds_free(arr[i]);
@@ -81,7 +154,7 @@ static int mapping_to_sds_pairs(PyObject *mapping, sds **fields_out, sds **value
     Py_ssize_t pos = 0, count = 0;
     while (PyDict_Next(mapping, &pos, &mk, &mv)) {
         sds f = pyobj_to_sds(mk);
-        sds v = f ? pyobj_to_sds(mv) : NULL;
+        sds v = f ? pyobj_to_tagged_sds(mv) : NULL;
         if (!f || !v) {
             if (f) sds_free(f);
             if (v) sds_free(v);
@@ -132,15 +205,17 @@ static int hash_apply_fields(credish_store *store, PyObject *handle, char *key, 
     credish_rwlock_wrunlock(&store->lock);
 
     const char **aof_argv = malloc((size_t)(1 + 2 * n) * sizeof(char *));
-    if (aof_argv) {
-        aof_argv[0] = key;
+    size_t *aof_lens = malloc((size_t)(1 + 2 * n) * sizeof(size_t));
+    if (aof_argv && aof_lens) {
+        aof_argv[0] = key; aof_lens[0] = (size_t)keylen;
         for (Py_ssize_t i = 0; i < n; i++) {
-            aof_argv[1 + 2 * i] = fields[i];
-            aof_argv[2 + 2 * i] = values[i];
+            aof_argv[1 + 2 * i] = fields[i]; aof_lens[1 + 2 * i] = SDS_LEN(fields[i]);
+            aof_argv[2 + 2 * i] = values[i]; aof_lens[2 + 2 * i] = SDS_LEN(values[i]);
         }
-        aof_append(store, "HSET", (int)(1 + 2 * n), aof_argv);
-        free(aof_argv);
+        aof_append_len(store, "HSET", (int)(1 + 2 * n), aof_argv, aof_lens);
     }
+    free(aof_argv);
+    free(aof_lens);
 
     if (added_out) *added_out = added;
     return 0;
@@ -181,7 +256,7 @@ PyObject *py_hset(PyObject *self, PyObject *args, PyObject *kw) {
         values = calloc(1, sizeof(sds));
         if (!fields || !values) { free(fields); free(values); return PyErr_NoMemory(); }
         sds f = pyobj_to_sds(field_obj);
-        sds v = f ? pyobj_to_sds(value_obj) : NULL;
+        sds v = f ? pyobj_to_tagged_sds(value_obj) : NULL;
         if (!f || !v) {
             if (f) sds_free(f);
             if (v) sds_free(v);
@@ -203,10 +278,14 @@ PyObject *py_hset(PyObject *self, PyObject *args, PyObject *kw) {
     return PyLong_FromLong(added);
 }
 
-PyObject *py_hget(PyObject *self, PyObject *args) {
+PyObject *py_hget(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
+    static char *kwlist[] = {"handle","key","field","native",NULL};
     PyObject *handle, *key_obj, *field_obj;
-    if (!PyArg_ParseTuple(args, "OOO", &handle, &key_obj, &field_obj)) return NULL;
+    int native = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|p", kwlist,
+            &handle, &key_obj, &field_obj, &native))
+        return NULL;
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
@@ -229,7 +308,7 @@ PyObject *py_hget(PyObject *self, PyObject *args) {
         sds val = dict_fetch_value((dict *)o->ptr, field);
         if (val) {
             Py_DECREF(result);
-            result = PyBytes_FromStringAndSize(val, (Py_ssize_t)SDS_LEN(val));
+            result = native ? tagged_value_to_native(val) : tagged_value_to_bytes(val);
         }
     }
     credish_rwlock_wrunlock(&store->lock);
@@ -264,10 +343,14 @@ PyObject *py_hmset(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
-PyObject *py_hmget(PyObject *self, PyObject *args) {
+PyObject *py_hmget(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
+    static char *kwlist[] = {"handle","key","fields","native",NULL};
     PyObject *handle, *key_obj, *fields_list;
-    if (!PyArg_ParseTuple(args, "OOO", &handle, &key_obj, &fields_list)) return NULL;
+    int native = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|p", kwlist,
+            &handle, &key_obj, &fields_list, &native))
+        return NULL;
     if (!PyList_Check(fields_list)) { PyErr_SetString(PyExc_TypeError, "expected list"); return NULL; }
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
@@ -305,7 +388,7 @@ PyObject *py_hmget(PyObject *self, PyObject *args) {
         sds val = d ? dict_fetch_value(d, fields[i]) : NULL;
         PyObject *item;
         if (val) {
-            item = PyBytes_FromStringAndSize(val, (Py_ssize_t)SDS_LEN(val));
+            item = native ? tagged_value_to_native(val) : tagged_value_to_bytes(val);
         } else {
             item = Py_None;
             Py_INCREF(item);
@@ -366,12 +449,17 @@ PyObject *py_hdel(PyObject *self, PyObject *args) {
 
     if (removed_count > 0) {
         const char **aof_argv = malloc((size_t)(1 + removed_count) * sizeof(char *));
-        if (aof_argv) {
-            aof_argv[0] = key;
-            for (Py_ssize_t i = 0; i < removed_count; i++) aof_argv[1 + i] = removed_fields[i];
-            aof_append(store, "HDEL", (int)(1 + removed_count), aof_argv);
-            free(aof_argv);
+        size_t *aof_lens = malloc((size_t)(1 + removed_count) * sizeof(size_t));
+        if (aof_argv && aof_lens) {
+            aof_argv[0] = key; aof_lens[0] = (size_t)keylen;
+            for (Py_ssize_t i = 0; i < removed_count; i++) {
+                aof_argv[1 + i] = removed_fields[i];
+                aof_lens[1 + i] = SDS_LEN(removed_fields[i]);
+            }
+            aof_append_len(store, "HDEL", (int)(1 + removed_count), aof_argv, aof_lens);
         }
+        free(aof_argv);
+        free(aof_lens);
     }
 
     free_sds_array(fields, n); free(fields);
@@ -409,10 +497,13 @@ PyObject *py_hexists(PyObject *self, PyObject *args) {
     Py_RETURN_FALSE;
 }
 
-PyObject *py_hgetall(PyObject *self, PyObject *args) {
+PyObject *py_hgetall(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
+    static char *kwlist[] = {"handle","key","native",NULL};
     PyObject *handle, *key_obj;
-    if (!PyArg_ParseTuple(args, "OO", &handle, &key_obj)) return NULL;
+    int native = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+        return NULL;
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
@@ -436,7 +527,7 @@ PyObject *py_hgetall(PyObject *self, PyObject *args) {
                 sds k = (sds)e->key;
                 sds v = (sds)e->v.val;
                 PyObject *pk = PyBytes_FromStringAndSize(k, (Py_ssize_t)SDS_LEN(k));
-                PyObject *pv = pk ? PyBytes_FromStringAndSize(v, (Py_ssize_t)SDS_LEN(v)) : NULL;
+                PyObject *pv = pk ? (native ? tagged_value_to_native(v) : tagged_value_to_bytes(v)) : NULL;
                 if (pk && pv) PyDict_SetItem(result, pk, pv);
                 Py_XDECREF(pk);
                 Py_XDECREF(pv);
@@ -448,8 +539,10 @@ PyObject *py_hgetall(PyObject *self, PyObject *args) {
     return result;
 }
 
-/* Shared body for HKEYS/HVALS: collect either the dict's keys or values. */
-static PyObject *hash_collect(credish_store *store, PyObject *handle, char *key, int keylen, int want_values) {
+/* Shared body for HKEYS/HVALS: collect either the dict's keys or values.
+ * `native` only ever applies to values — field names are never tagged. */
+static PyObject *hash_collect(credish_store *store, PyObject *handle, char *key, int keylen,
+                               int want_values, int native) {
     credish_rwlock_wrlock(&store->lock);
     credish_db *db = credish_get_db(handle, store);
     credishObject *o = db_lookup(db, key, keylen);
@@ -466,8 +559,14 @@ static PyObject *hash_collect(credish_store *store, PyObject *handle, char *key,
         if (it) {
             dictEntry *e;
             while ((e = dict_iter_next(it))) {
-                sds s = want_values ? (sds)e->v.val : (sds)e->key;
-                PyObject *item = PyBytes_FromStringAndSize(s, (Py_ssize_t)SDS_LEN(s));
+                PyObject *item;
+                if (want_values) {
+                    sds v = (sds)e->v.val;
+                    item = native ? tagged_value_to_native(v) : tagged_value_to_bytes(v);
+                } else {
+                    sds k = (sds)e->key;
+                    item = PyBytes_FromStringAndSize(k, (Py_ssize_t)SDS_LEN(k));
+                }
                 if (item) { PyList_Append(result, item); Py_DECREF(item); }
             }
             dict_iter_free(it);
@@ -484,17 +583,20 @@ PyObject *py_hkeys(PyObject *self, PyObject *args) {
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    return hash_collect(store, handle, key, keylen, 0);
+    return hash_collect(store, handle, key, keylen, 0, 0);
 }
 
-PyObject *py_hvals(PyObject *self, PyObject *args) {
+PyObject *py_hvals(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
+    static char *kwlist[] = {"handle","key","native",NULL};
     PyObject *handle, *key_obj;
-    if (!PyArg_ParseTuple(args, "OO", &handle, &key_obj)) return NULL;
+    int native = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+        return NULL;
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    return hash_collect(store, handle, key, keylen, 1);
+    return hash_collect(store, handle, key, keylen, 1, native);
 }
 
 PyObject *py_hlen(PyObject *self, PyObject *args) {
@@ -555,10 +657,13 @@ PyObject *py_hincrby(PyObject *self, PyObject *args) {
     long long val = 0;
 
     if (existing) {
-        char tmp[64];
+        /* Skip the 1-byte encoding tag ahead of the payload. */
         size_t vlen = SDS_LEN(existing);
-        size_t cplen = vlen < 63 ? vlen : 63;
-        memcpy(tmp, existing, cplen);
+        size_t paylen = vlen > 0 ? vlen - 1 : 0;
+        const char *payload = existing + 1;
+        char tmp[64];
+        size_t cplen = paylen < 63 ? paylen : 63;
+        memcpy(tmp, payload, cplen);
         tmp[cplen] = '\0';
         char *end;
         val = strtoll(tmp, &end, 10);
@@ -573,15 +678,20 @@ PyObject *py_hincrby(PyObject *self, PyObject *args) {
 
     char buf[24];
     int n = snprintf(buf, sizeof(buf), "%lld", val);
-    sds newval = sds_newlen(buf, (size_t)n);
+    sds newval = sds_newlen(NULL, (size_t)n + 1);
     if (newval) {
+        newval[0] = (char)OBJ_ENCODING_INT;
+        memcpy(newval + 1, buf, (size_t)n);
         dict_replace(d, field, newval);
-        sds_free(newval);
     }
     credish_rwlock_wrunlock(&store->lock);
 
-    const char *aof_argv[] = { key, field, buf };
-    aof_append(store, "HSET", 3, aof_argv);
+    if (newval) {
+        const char *aof_argv[] = { key, field, newval };
+        size_t aof_lens[] = { (size_t)keylen, SDS_LEN(field), SDS_LEN(newval) };
+        aof_append_len(store, "HSET", 3, aof_argv, aof_lens);
+        sds_free(newval);
+    }
 
     sds_free(field);
     return PyLong_FromLongLong(val);
