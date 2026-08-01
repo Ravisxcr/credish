@@ -337,11 +337,11 @@ class CredishClient:
     def hexists(self, key: str, field: str) -> bool:
         return _credish.hexists(self._db, key, field)
 
-    def hgetall(self, key: str, native: bool = False) -> dict[bytes, Any]:
+    def hgetall(self, key: str, native: bool = False) -> dict[Any, Any]:
         return _credish.hgetall(self._db, key, native=native)
 
-    def hkeys(self, key: str) -> list[bytes]:
-        return _credish.hkeys(self._db, key)
+    def hkeys(self, key: str, native: bool = False) -> list[Any]:
+        return _credish.hkeys(self._db, key, native=native)
 
     def hvals(self, key: str, native: bool = False) -> list[Any]:
         return _credish.hvals(self._db, key, native=native)

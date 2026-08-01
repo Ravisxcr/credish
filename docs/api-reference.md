@@ -356,12 +356,14 @@ Hashes store field/value pairs under a single key, similar to a Python `dict`
 of `bytes`. See the [Redis hashes documentation](https://redis.io/docs/latest/develop/data-types/hashes/)
 for the general data type semantics.
 
-Each field's *value* (never the field name) is tagged with its original
-Python type (`str`/`bytes`/`int`/`float`) when written by `hset`/`hmset`.
-By default, getters return the raw `bytes` payload as always; pass
-`native=True` to `hget`/`hmget`/`hgetall`/`hvals` to decode each value back
-to its original type instead — mirroring `get(key, native=True)` for
-top-level strings. Field names themselves are always returned as `bytes`.
+Each field's *value* is tagged with its original Python type
+(`str`/`bytes`/`int`/`float`) when written by `hset`/`hmset`. By default,
+getters return the raw `bytes` payload as always; pass `native=True` to
+`hget`/`hmget`/`hgetall`/`hvals`/`hkeys` to decode values (and, for
+`hgetall`/`hkeys`, field names too) back to their original type instead —
+mirroring `get(key, native=True)` for top-level strings. Field names aren't
+tagged (they're identifiers, not typed data); `native=True` decodes them as
+UTF-8 text, falling back to `bytes` for a field name that isn't valid UTF-8.
 
 ### `hset(key, field=None, value=None, mapping=None) -> int`
 
@@ -419,19 +421,23 @@ Returns whether a field exists on the hash.
 client.hexists("user:1", "name")
 ```
 
-### `hgetall(key, native=False) -> dict[bytes, Any]`
+### `hgetall(key, native=False) -> dict[Any, Any]`
 
 Returns all fields and values as a dict. Returns `{}` for a missing key.
-`native=True` decodes each value as in `hget`; field names (dict keys) are
-always `bytes`.
+`native=True` decodes each value as in `hget`, and decodes field names
+(dict keys) as UTF-8 `str` (falling back to `bytes` if a field name isn't
+valid UTF-8).
 
 ```python
 client.hgetall("user:1")
+client.hgetall("user:1", native=True)  # {"name": "ravi", "age": 30}
 ```
 
-### `hkeys(key) -> list[bytes]`
+### `hkeys(key, native=False) -> list[Any]`
 
-Returns all field names. Returns `[]` for a missing key.
+Returns all field names. Returns `[]` for a missing key. `native=True`
+decodes each field name as UTF-8 `str` (falling back to `bytes` if it isn't
+valid UTF-8).
 
 ```python
 client.hkeys("user:1")

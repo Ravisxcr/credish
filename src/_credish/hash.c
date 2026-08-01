@@ -135,6 +135,17 @@ static PyObject *tagged_value_to_native(sds val) {
     }
 }
 
+/* Field names are never tagged (they're identifiers, not typed data), so
+ * native=True just means "decode as UTF-8 text like a normal dict key" —
+ * falling back to bytes for a field name that isn't valid UTF-8. */
+static PyObject *field_key_to_py(const char *data, Py_ssize_t len, int native) {
+    if (!native) return PyBytes_FromStringAndSize(data, len);
+    PyObject *s = PyUnicode_DecodeUTF8(data, len, NULL);
+    if (s) return s;
+    PyErr_Clear();
+    return PyBytes_FromStringAndSize(data, len);
+}
+
 static void free_sds_array(sds *arr, Py_ssize_t n) {
     if (!arr) return;
     for (Py_ssize_t i = 0; i < n; i++) sds_free(arr[i]);
@@ -526,7 +537,7 @@ PyObject *py_hgetall(PyObject *self, PyObject *args, PyObject *kw) {
             while ((e = dict_iter_next(it))) {
                 sds k = (sds)e->key;
                 sds v = (sds)e->v.val;
-                PyObject *pk = PyBytes_FromStringAndSize(k, (Py_ssize_t)SDS_LEN(k));
+                PyObject *pk = field_key_to_py(k, (Py_ssize_t)SDS_LEN(k), native);
                 PyObject *pv = pk ? (native ? tagged_value_to_native(v) : tagged_value_to_bytes(v)) : NULL;
                 if (pk && pv) PyDict_SetItem(result, pk, pv);
                 Py_XDECREF(pk);
@@ -565,7 +576,7 @@ static PyObject *hash_collect(credish_store *store, PyObject *handle, char *key,
                     item = native ? tagged_value_to_native(v) : tagged_value_to_bytes(v);
                 } else {
                     sds k = (sds)e->key;
-                    item = PyBytes_FromStringAndSize(k, (Py_ssize_t)SDS_LEN(k));
+                    item = field_key_to_py(k, (Py_ssize_t)SDS_LEN(k), native);
                 }
                 if (item) { PyList_Append(result, item); Py_DECREF(item); }
             }
@@ -576,14 +587,17 @@ static PyObject *hash_collect(credish_store *store, PyObject *handle, char *key,
     return result;
 }
 
-PyObject *py_hkeys(PyObject *self, PyObject *args) {
+PyObject *py_hkeys(PyObject *self, PyObject *args, PyObject *kw) {
     (void)self;
+    static char *kwlist[] = {"handle","key","native",NULL};
     PyObject *handle, *key_obj;
-    if (!PyArg_ParseTuple(args, "OO", &handle, &key_obj)) return NULL;
+    int native = 0;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+        return NULL;
     credish_store *store = credish_get_store(handle); if (!store) return NULL;
     char *key; int keylen;
     if (!decode_key(key_obj, &key, &keylen)) return NULL;
-    return hash_collect(store, handle, key, keylen, 0, 0);
+    return hash_collect(store, handle, key, keylen, 0, native);
 }
 
 PyObject *py_hvals(PyObject *self, PyObject *args, PyObject *kw) {

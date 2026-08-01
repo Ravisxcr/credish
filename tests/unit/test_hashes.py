@@ -179,15 +179,26 @@ def test_hash_native_decoding(client):
     assert client.hget("h", "counter", native=True) == 7
     assert client.hget("h", "missing", native=True) is None
 
+    # native=True also decodes field names (dict keys) to str.
     assert client.hgetall("h", native=True) == {
-        b"str_field": "hello",
-        b"int_field": -42,
-        b"float_field": 3.25,
-        b"bytes_field": b"\x00raw\x00",
-        b"counter": 7,
+        "str_field": "hello",
+        "int_field": -42,
+        "float_field": 3.25,
+        "bytes_field": b"\x00raw\x00",
+        "counter": 7,
     }
-    # Field names (dict keys) are always bytes, never decoded.
-    assert all(isinstance(k, bytes) for k in client.hgetall("h", native=True))
+    assert all(isinstance(k, str) for k in client.hgetall("h", native=True))
+    # Default hgetall is untouched: bytes keys, bytes values.
+    assert all(isinstance(k, bytes) for k in client.hgetall("h"))
+
+    assert sorted(client.hkeys("h", native=True)) == [
+        "bytes_field",
+        "counter",
+        "float_field",
+        "int_field",
+        "str_field",
+    ]
+    assert all(isinstance(k, bytes) for k in client.hkeys("h"))
 
     assert sorted(client.hvals("h", native=True), key=str) == sorted(
         ["hello", -42, 3.25, b"\x00raw\x00", 7], key=str
@@ -200,6 +211,24 @@ def test_hash_native_decoding(client):
     ]
 
 
+def test_hash_native_field_name_falls_back_to_bytes_when_not_utf8(client):
+    # A field name that isn't valid UTF-8 can't become a str; native=True
+    # must fall back to bytes for the key instead of raising/corrupting it.
+    invalid_utf8_field = b"\xff\xfe\x80"
+    client.hset("h", invalid_utf8_field, "value")
+    client.hset("h", "normal", "ok")
+
+    result = client.hgetall("h", native=True)
+    # Looking it up by the raw bytes key only succeeds if the key stayed
+    # bytes rather than being silently coerced/dropped.
+    assert result[invalid_utf8_field] == "value"
+    assert result["normal"] == "ok"
+
+    keys = client.hkeys("h", native=True)
+    assert invalid_utf8_field in keys
+    assert "normal" in keys
+
+
 def test_hash_native_values_survive_rdb_roundtrip(tmp_path):
     with CredishClient(data_dir=str(tmp_path), persistence="rdb") as c:
         c.hset("h", mapping={"s": "hi", "i": 5, "f": 1.5})
@@ -208,10 +237,10 @@ def test_hash_native_values_survive_rdb_roundtrip(tmp_path):
 
     with CredishClient(data_dir=str(tmp_path), persistence="rdb") as c:
         assert c.hgetall("h", native=True) == {
-            b"s": "hi",
-            b"i": 5,
-            b"f": 1.5,
-            b"b": b"\x00bin\x00",
+            "s": "hi",
+            "i": 5,
+            "f": 1.5,
+            "b": b"\x00bin\x00",
         }
 
 
@@ -223,10 +252,10 @@ def test_hash_native_values_survive_aof_roundtrip(tmp_path):
 
     with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
         assert c.hgetall("h", native=True) == {
-            b"s": "hi",
-            b"i": 7,
-            b"f": 1.5,
-            b"b": b"\x00bin\x00",
+            "s": "hi",
+            "i": 7,
+            "f": 1.5,
+            "b": b"\x00bin\x00",
         }
 
 

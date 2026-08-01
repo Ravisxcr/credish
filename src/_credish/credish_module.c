@@ -1052,7 +1052,7 @@ static PyMethodDef credish_methods[] = {
     {"hdel",     py_hdel,                METH_VARARGS,               NULL},
     {"hexists",  py_hexists,             METH_VARARGS,               NULL},
     {"hgetall",  (PyCFunction)py_hgetall,METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hkeys",    py_hkeys,               METH_VARARGS,               NULL},
+    {"hkeys",    (PyCFunction)py_hkeys,  METH_VARARGS|METH_KEYWORDS, NULL},
     {"hvals",    (PyCFunction)py_hvals,  METH_VARARGS|METH_KEYWORDS, NULL},
     {"hlen",     py_hlen,                METH_VARARGS,               NULL},
     {"hincrby",  py_hincrby,             METH_VARARGS,               NULL},

@@ -15,7 +15,7 @@ PyObject *py_hmget(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_hdel(PyObject *self, PyObject *args);
 PyObject *py_hexists(PyObject *self, PyObject *args);
 PyObject *py_hgetall(PyObject *self, PyObject *args, PyObject *kw);
-PyObject *py_hkeys(PyObject *self, PyObject *args);
+PyObject *py_hkeys(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_hvals(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_hlen(PyObject *self, PyObject *args);
 PyObject *py_hincrby(PyObject *self, PyObject *args);
