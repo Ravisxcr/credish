@@ -1,7 +1,7 @@
 /*
  * AOF persistence — append-only command log.
  *
- * Format: RESP-like inline records written by aof_append() in db.c.
+ * Format: RESP-like inline records written by aof_append_len() in db.c.
  * On load, each record is parsed and re-executed against the db layer.
  *
  * Crash recovery:
@@ -199,6 +199,34 @@ static void replay_cmd(credish_store *store, int db_id, int argc, char **argv, s
                     dict_delete(zs->dict, member);
                 }
                 sds_free(member);
+            }
+        }
+    } else if (credish_strcasecmp(cmd, "HSET") == 0) {
+        ARGC_MIN(4);
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
+        if (!o) {
+            o = obj_create_hash();
+            if (o) db_set(db, argv[1], (int)argv_lens[1], o, store);
+        }
+        if (o && o->type == OBJ_HASH) {
+            dict *d = (dict *)o->ptr;
+            for (int i = 2; i + 1 < argc; i += 2) {
+                sds field = sds_newlen(argv[i], argv_lens[i]);
+                sds val = sds_newlen(argv[i + 1], argv_lens[i + 1]);
+                if (field && val) dict_replace(d, field, val);
+                sds_free(field);
+                sds_free(val);
+            }
+        }
+    } else if (credish_strcasecmp(cmd, "HDEL") == 0) {
+        ARGC_MIN(3);
+        credishObject *o = db_lookup(db, argv[1], (int)argv_lens[1]);
+        if (o && o->type == OBJ_HASH) {
+            dict *d = (dict *)o->ptr;
+            for (int i = 2; i < argc; i++) {
+                sds field = sds_newlen(argv[i], argv_lens[i]);
+                if (field) dict_delete(d, field);
+                sds_free(field);
             }
         }
     }

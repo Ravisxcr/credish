@@ -1,0 +1,113 @@
+version: '3'
+
+vars:
+  VENV_DIR: .venv
+  DIST_DIR: dist
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+
+  venv:
+    desc: Create the virtual environment if it doesn't exist
+    cmds:
+      - cmd: python -m venv {{.VENV_DIR}}
+        platforms: [windows]
+      - cmd: python3 -m venv {{.VENV_DIR}}
+        platforms: [linux, darwin]
+    status:
+      - test -d {{.VENV_DIR}}
+
+  bootstrap:
+    desc: Install local packaging tools (build, twine, cibuildwheel)
+    deps: [venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m pip install --upgrade build twine cibuildwheel'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m pip install --upgrade build twine cibuildwheel'
+        platforms: [linux, darwin]
+
+  install-dev:
+    desc: Install this project editable with dev deps
+    deps: [venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m pip install -e ".[dev]"'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m pip install -e ".[dev]"'
+        platforms: [linux, darwin]
+
+  build-inplace:
+    desc: Build the C extension in-place into credish/
+    deps: [venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python setup.py build_ext --inplace'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python setup.py build_ext --inplace'
+        platforms: [linux, darwin]
+
+  test:
+    desc: Run tests
+    deps: [venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m pytest tests'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m pytest tests'
+        platforms: [linux, darwin]
+
+  build:
+    desc: Build sdist and wheel into dist/
+    deps: [clean, venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m build'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m build'
+        platforms: [linux, darwin]
+
+  build-wheels:
+    desc: Build configured wheels for the host platform; run setup-qemu first for foreign archs
+    deps: [clean, venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m cibuildwheel --output-dir {{.DIST_DIR}}'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m cibuildwheel --output-dir {{.DIST_DIR}}'
+        platforms: [linux, darwin]
+
+  setup-qemu:
+    desc: Register Docker QEMU emulators for foreign-arch wheel builds
+    cmds:
+      - docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+  check:
+    desc: Validate dist/* with twine
+    deps: [venv]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m twine check {{.DIST_DIR}}/*'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m twine check {{.DIST_DIR}}/*'
+        platforms: [linux, darwin]
+
+  upload:
+    desc: Upload dist/* to PyPI with twine
+    deps: [check]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m twine upload {{.DIST_DIR}}/*'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m twine upload {{.DIST_DIR}}/*'
+        platforms: [linux, darwin]
+
+  upload-test:
+    desc: Upload dist/* to TestPyPI with twine
+    deps: [check]
+    cmds:
+      - cmd: '{{.VENV_DIR}}/Scripts/python -m twine upload --repository testpypi --skip-existing --verbose {{.DIST_DIR}}/*'
+        platforms: [windows]
+      - cmd: '{{.VENV_DIR}}/bin/python -m twine upload --repository testpypi --skip-existing --verbose {{.DIST_DIR}}/*'
+        platforms: [linux, darwin]
+
+  clean:
+    desc: Remove build artifacts (does not delete .venv)
+    cmds:
+      - rm -rf build {{.DIST_DIR}} wheelhouse *.egg-info credish.egg-info
+      - rm -f credish/*.so credish/*.pyd

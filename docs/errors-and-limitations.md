@@ -53,16 +53,13 @@ keys
 Calling these methods in the current build will raise `AttributeError` from
 `credish._credish`.
 
-## Planned Hash and Set Commands
+## Planned Set Commands
 
-Hash and set methods are present in the Python wrapper as part of the planned
+Set methods are present in the Python wrapper as part of the planned
 Redis-compatible API, but they are not currently exported by the C extension.
-
-Planned hash methods:
-
-```text
-hset, hget, hmset, hmget, hdel, hexists, hgetall, hkeys, hvals, hlen, hincrby
-```
+Hash methods (`hset`, `hget`, `hmset`, `hmget`, `hdel`, `hexists`, `hgetall`,
+`hkeys`, `hvals`, `hlen`, `hincrby`) are fully implemented — see
+[API Reference: Hash Commands](api-reference.md#hash-commands).
 
 Planned set methods:
 
@@ -72,8 +69,8 @@ sadd, srem, smembers, sismember, scard, sunion, sinter, sdiff
 
 ## Current Limitations
 
-- Hash and set command groups are planned but not currently implemented in the
-  C extension.
+- The set command group is planned but not currently implemented in the C
+  extension.
 - Several Redis string/list/counter/key-space wrappers exist in Python before
   their C extension counterparts (see [Wrapper-Only Methods](#wrapper-only-methods)).
 - This is an in-process cache, not a network Redis server.

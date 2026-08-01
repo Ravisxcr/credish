@@ -14,6 +14,7 @@ _credish_sources = [
     "src/_credish/intset.c",
     "src/_credish/object.c",
     "src/_credish/sorted_set.c",
+    "src/_credish/hash.c",
     "src/_credish/db.c",
     "src/_credish/expire.c",
     "src/_credish/server.c",

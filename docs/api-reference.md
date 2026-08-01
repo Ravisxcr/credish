@@ -349,3 +349,123 @@ Increments a member score and returns the new score.
 ```python
 client.zincrby("leaders", 5, "ann")
 ```
+
+## Hash Commands
+
+Hashes store field/value pairs under a single key, similar to a Python `dict`
+of `bytes`. See the [Redis hashes documentation](https://redis.io/docs/latest/develop/data-types/hashes/)
+for the general data type semantics.
+
+Each field's *value* is tagged with its original Python type
+(`str`/`bytes`/`int`/`float`) when written by `hset`/`hmset`. By default,
+getters return the raw `bytes` payload as always; pass `native=True` to
+`hget`/`hmget`/`hgetall`/`hvals`/`hkeys` to decode values (and, for
+`hgetall`/`hkeys`, field names too) back to their original type instead —
+mirroring `get(key, native=True)` for top-level strings. Field names aren't
+tagged (they're identifiers, not typed data); `native=True` decodes them as
+UTF-8 text, falling back to `bytes` for a field name that isn't valid UTF-8.
+
+### `hset(key, field=None, value=None, mapping=None) -> int`
+
+Sets one field, or multiple fields via `mapping`, and returns the number of
+*new* fields added (fields that already existed and were only updated are not
+counted). Creates the hash if `key` does not exist.
+
+```python
+client.hset("user:1", "name", "ravi")
+client.hset("user:1", mapping={"name": "ravi", "age": 30})
+```
+
+### `hget(key, field, native=False) -> Any`
+
+Returns a field's value, or `None` if the field or key is missing. With
+`native=True`, decodes the value back to its original `str`/`int`/`float`
+type instead of returning raw `bytes`.
+
+```python
+client.hget("user:1", "name")
+client.hget("user:1", "age", native=True)  # 30, not b"30"
+```
+
+### `hmset(key, mapping) -> bool`
+
+Sets multiple fields at once. Always returns `True`. Equivalent to
+`hset(key, mapping=mapping)` without the added-field count.
+
+```python
+client.hmset("user:1", {"name": "ravi", "age": 30})
+```
+
+### `hmget(key, fields, native=False) -> list[Any]`
+
+Returns values for the given fields, in the same order, with `None` for any
+field that is missing. `native=True` decodes each value as in `hget`.
+
+```python
+client.hmget("user:1", ["name", "missing"])
+```
+
+### `hdel(key, *fields) -> int`
+
+Removes one or more fields and returns the number actually removed.
+
+```python
+client.hdel("user:1", "age", "missing")
+```
+
+### `hexists(key, field) -> bool`
+
+Returns whether a field exists on the hash.
+
+```python
+client.hexists("user:1", "name")
+```
+
+### `hgetall(key, native=False) -> dict[Any, Any]`
+
+Returns all fields and values as a dict. Returns `{}` for a missing key.
+`native=True` decodes each value as in `hget`, and decodes field names
+(dict keys) as UTF-8 `str` (falling back to `bytes` if a field name isn't
+valid UTF-8).
+
+```python
+client.hgetall("user:1")
+client.hgetall("user:1", native=True)  # {"name": "ravi", "age": 30}
+```
+
+### `hkeys(key, native=False) -> list[Any]`
+
+Returns all field names. Returns `[]` for a missing key. `native=True`
+decodes each field name as UTF-8 `str` (falling back to `bytes` if it isn't
+valid UTF-8).
+
+```python
+client.hkeys("user:1")
+```
+
+### `hvals(key, native=False) -> list[Any]`
+
+Returns all values. Returns `[]` for a missing key. `native=True` decodes
+each value as in `hget`.
+
+```python
+client.hvals("user:1")
+```
+
+### `hlen(key) -> int`
+
+Returns the number of fields in the hash, or `0` for a missing key.
+
+```python
+client.hlen("user:1")
+```
+
+### `hincrby(key, field, amount) -> int`
+
+Increments an integer field by `amount` and returns the new integer value.
+Creates the hash and/or field (starting from `0`) if either is missing.
+Raises `ValueError` if the field's current value is not integer-like.
+
+```python
+client.hincrby("user:1", "visits", 1)
+```

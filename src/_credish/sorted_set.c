@@ -214,9 +214,10 @@ PyObject *py_zadd(PyObject *self, PyObject *args, PyObject *kw) {
     for (Py_ssize_t i = 0; i < count; i++) {
         if (applied[i]) {
             char scorebuf[64];
-            snprintf(scorebuf, sizeof(scorebuf), "%.17g", scores[i]);
+            int scorelen = snprintf(scorebuf, sizeof(scorebuf), "%.17g", scores[i]);
             const char *aof_argv[] = { key, scorebuf, members[i] };
-            aof_append(store, "ZADD", 3, aof_argv);
+            size_t aof_lens[] = { (size_t)keylen, (size_t)scorelen, SDS_LEN(members[i]) };
+            aof_append_len(store, "ZADD", 3, aof_argv, aof_lens);
         }
         sds_free(members[i]);
     }
@@ -412,7 +413,8 @@ PyObject *py_zrem(PyObject *self, PyObject *args) {
     for (Py_ssize_t i = 0; i < n; i++) {
         if (removed_flags[i]) {
             const char *aof_argv[] = { key, members[i] };
-            aof_append(store, "ZREM", 2, aof_argv);
+            size_t aof_lens[] = { (size_t)keylen, SDS_LEN(members[i]) };
+            aof_append_len(store, "ZREM", 2, aof_argv, aof_lens);
         }
         sds_free(members[i]);
     }
@@ -529,9 +531,10 @@ PyObject *py_zincrby(PyObject *self, PyObject *args) {
     credish_rwlock_wrunlock(&store->lock);
 
     char scorebuf[64];
-    snprintf(scorebuf, sizeof(scorebuf), "%.17g", new_score);
+    int scorelen = snprintf(scorebuf, sizeof(scorebuf), "%.17g", new_score);
     const char *aof_argv[] = { key, scorebuf, member };
-    aof_append(store, "ZADD", 3, aof_argv);
+    size_t aof_lens[] = { (size_t)keylen, (size_t)scorelen, SDS_LEN(member) };
+    aof_append_len(store, "ZADD", 3, aof_argv, aof_lens);
     sds_free(member);
     return PyFloat_FromDouble(new_score);
 }

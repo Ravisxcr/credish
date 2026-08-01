@@ -11,6 +11,7 @@
 #include "adlist.h"
 #include "dict.h"
 #include "sorted_set.h"
+#include "hash.h"
 #include "server.h"
 #include "persistence/rdb.h"
 #include <string.h>
@@ -100,7 +101,7 @@ static sds pyobj_to_sds(PyObject *object) {
         long long int_value = PyLong_AsLongLong(object);
         char int_buf[24];
         int int_len = snprintf(int_buf, sizeof(int_buf), "%lld", int_value);
-        return sds_newlen(int_buf, (size_t)int_value);
+        return sds_newlen(int_buf, (size_t)int_len);
     }
     if (PyFloat_Check(object)) {
         double float_value = PyFloat_AS_DOUBLE(object);
@@ -767,9 +768,10 @@ static PyObject *py_incrby(PyObject *self, PyObject *args) {
 
     char amount_buf[24];
 
-    snprintf(amount_buf, sizeof(amount_buf), "%lld", amount);
+    int amount_n = snprintf(amount_buf, sizeof(amount_buf), "%lld", amount);
     const char *incrby_argv[] = { key, amount_buf };
-    aof_append(store, "INCRBY", 2, incrby_argv);
+    size_t incrby_lens[] = { (size_t)keylen, (size_t)amount_n };
+    aof_append_len(store, "INCRBY", 2, incrby_argv, incrby_lens);
 
     return PyLong_FromLongLong(val);
 }
@@ -828,22 +830,24 @@ static PyObject *py_lpush(PyObject *self, PyObject *args) {
     if (store->aof_file && n > 0) {
 
         const char **aof_argv = malloc((size_t)(1 + n) * sizeof(char *));
+        size_t *aof_lens = malloc((size_t)(1 + n) * sizeof(size_t));
         sds *tmp_sdses = malloc((size_t)n * sizeof(sds));
 
-        if (aof_argv && tmp_sdses) {
-            aof_argv[0] = key;
+        if (aof_argv && aof_lens && tmp_sdses) {
+            aof_argv[0] = key; aof_lens[0] = (size_t)keylen;
             Py_ssize_t cnt = 0;
 
             for (Py_ssize_t i = 0; i < n; i++) {
                 sds v = pyobj_to_sds(PyList_GET_ITEM(vals_list, i));
-                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; cnt++; }
+                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; aof_lens[1 + cnt] = SDS_LEN(v); cnt++; }
             }
 
-            if (cnt > 0) aof_append(store, "LPUSH", (int)(1 + cnt), aof_argv);
+            if (cnt > 0) aof_append_len(store, "LPUSH", (int)(1 + cnt), aof_argv, aof_lens);
 
             for (Py_ssize_t i = 0; i < cnt; i++) sds_free(tmp_sdses[i]);
         }
         free(aof_argv);
+        free(aof_lens);
         free(tmp_sdses);
     }
 
@@ -899,22 +903,24 @@ static PyObject *py_rpush(PyObject *self, PyObject *args) {
 
     if (store->aof_file && n > 0) {
         const char **aof_argv = malloc((size_t)(1 + n) * sizeof(char *));
+        size_t *aof_lens = malloc((size_t)(1 + n) * sizeof(size_t));
         sds *tmp_sdses = malloc((size_t)n * sizeof(sds));
 
-        if (aof_argv && tmp_sdses) {
-            aof_argv[0] = key;
+        if (aof_argv && aof_lens && tmp_sdses) {
+            aof_argv[0] = key; aof_lens[0] = (size_t)keylen;
             Py_ssize_t cnt = 0;
 
             for (Py_ssize_t i = 0; i < n; i++) {
                 sds v = pyobj_to_sds(PyList_GET_ITEM(vals_list, i));
-                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; cnt++; }
+                if (v) { tmp_sdses[cnt] = v; aof_argv[1 + cnt] = v; aof_lens[1 + cnt] = SDS_LEN(v); cnt++; }
             }
 
-            if (cnt > 0) aof_append(store, "RPUSH", (int)(1 + cnt), aof_argv);
+            if (cnt > 0) aof_append_len(store, "RPUSH", (int)(1 + cnt), aof_argv, aof_lens);
 
             for (Py_ssize_t i = 0; i < cnt; i++) sds_free(tmp_sdses[i]);
         }
         free(aof_argv);
+        free(aof_lens);
         free(tmp_sdses);
     }
 
@@ -1039,6 +1045,17 @@ static PyMethodDef credish_methods[] = {
     {"zcard",    py_zcard,               METH_VARARGS,               NULL},
     {"zrangebyscore", (PyCFunction)py_zrangebyscore, METH_VARARGS|METH_KEYWORDS, NULL},
     {"zincrby",  py_zincrby,             METH_VARARGS,               NULL},
+    {"hset",     (PyCFunction)py_hset,   METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hget",     (PyCFunction)py_hget,   METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hmset",    py_hmset,               METH_VARARGS,               NULL},
+    {"hmget",    (PyCFunction)py_hmget,  METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hdel",     py_hdel,                METH_VARARGS,               NULL},
+    {"hexists",  py_hexists,             METH_VARARGS,               NULL},
+    {"hgetall",  (PyCFunction)py_hgetall,METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hkeys",    (PyCFunction)py_hkeys,  METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hvals",    (PyCFunction)py_hvals,  METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hlen",     py_hlen,                METH_VARARGS,               NULL},
+    {"hincrby",  py_hincrby,             METH_VARARGS,               NULL},
     {NULL, NULL, 0, NULL}
 };
 
