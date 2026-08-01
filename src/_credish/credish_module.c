@@ -11,6 +11,7 @@
 #include "adlist.h"
 #include "dict.h"
 #include "sorted_set.h"
+#include "hash.h"
 #include "server.h"
 #include "persistence/rdb.h"
 #include <string.h>
@@ -1039,6 +1040,17 @@ static PyMethodDef credish_methods[] = {
     {"zcard",    py_zcard,               METH_VARARGS,               NULL},
     {"zrangebyscore", (PyCFunction)py_zrangebyscore, METH_VARARGS|METH_KEYWORDS, NULL},
     {"zincrby",  py_zincrby,             METH_VARARGS,               NULL},
+    {"hset",     (PyCFunction)py_hset,   METH_VARARGS|METH_KEYWORDS, NULL},
+    {"hget",     py_hget,                METH_VARARGS,               NULL},
+    {"hmset",    py_hmset,               METH_VARARGS,               NULL},
+    {"hmget",    py_hmget,               METH_VARARGS,               NULL},
+    {"hdel",     py_hdel,                METH_VARARGS,               NULL},
+    {"hexists",  py_hexists,             METH_VARARGS,               NULL},
+    {"hgetall",  py_hgetall,             METH_VARARGS,               NULL},
+    {"hkeys",    py_hkeys,               METH_VARARGS,               NULL},
+    {"hvals",    py_hvals,               METH_VARARGS,               NULL},
+    {"hlen",     py_hlen,                METH_VARARGS,               NULL},
+    {"hincrby",  py_hincrby,             METH_VARARGS,               NULL},
     {NULL, NULL, 0, NULL}
 };
 

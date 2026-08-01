@@ -411,8 +411,8 @@ lock rather than forking, since Credish is a library embedded in the caller's
 process.
 
 RDB supports strings, lists, hashes, sets, and sorted sets at the serialization
-layer, though not every command group is currently exported through the public C
-module.
+layer, though the set command group is not yet exported through the public C
+module (strings, lists, hashes, and sorted sets are).
 
 ### AOF
 
