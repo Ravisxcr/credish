@@ -60,6 +60,8 @@ class CredishClient:
         ``AOF_FSYNC.NO`` or ``"no"``
     db:
         Logical database index (0–15).
+    decode_responses:
+        If True, read methods (get, hget, etc.) decode string/native values by default.
     """
 
     def __init__(
@@ -69,10 +71,12 @@ class CredishClient:
         save_interval: int = 300,
         aof_fsync: str | AOF_FSYNC = AOF_FSYNC.EVERYSEC,
         db: int = 0,
+        decode_responses: bool = False,
         _store: Any = None,
         _owns_store: bool = True,
     ) -> None:
         self._db_index = self._validate_db(db)
+        self._decode_responses = bool(decode_responses)
         self._owns_store = _owns_store
         self._closed = False
         if _store is None:
@@ -82,6 +86,7 @@ class CredishClient:
                 save_interval=save_interval,
                 aof_fsync=aof_fsync,
                 db=db,
+                decode_responses=self._decode_responses,
             )
         else:
             self._store = _store
@@ -148,6 +153,7 @@ class CredishClient:
         """
         return CredishClient(
             db=self._db_index if db is None else db,
+            decode_responses=self._decode_responses,
             _store=self._store,
             _owns_store=False,
         )
@@ -226,9 +232,10 @@ class CredishClient:
                             nx=nx, xx=xx,
                             value_encoding=value_encoding)
 
-    def get(self, key: str, native: bool = False) -> Any:
+    def get(self, key: str, native: Optional[bool] = None) -> Any:
+        should_decode = self._decode_responses if native is None else native
         value = _credish.get(self._db, key)
-        if value is None or not native:
+        if value is None or not should_decode:
             return value
         encoding = _credish.get_encoding(self._db, key)
         if encoding == _ValueEncoding.JSON:
@@ -322,13 +329,13 @@ class CredishClient:
             return _credish.hset(self._db, key, mapping=mapping)
         return _credish.hset(self._db, key, field=field, value=value)
 
-    def hget(self, key: str, field: str, native: bool = False) -> Any:
+    def hget(self, key: str, field: str, native: Optional[bool] = None) -> Any:
         return _credish.hget(self._db, key, field, native=native)
 
     def hmset(self, key: str, mapping: dict) -> bool:
         return _credish.hmset(self._db, key, mapping)
 
-    def hmget(self, key: str, fields: list[str], native: bool = False) -> list[Any]:
+    def hmget(self, key: str, fields: list[str], native: Optional[bool] = None) -> list[Any]:
         return _credish.hmget(self._db, key, fields, native=native)
 
     def hdel(self, key: str, *fields: str) -> int:
@@ -337,13 +344,13 @@ class CredishClient:
     def hexists(self, key: str, field: str) -> bool:
         return _credish.hexists(self._db, key, field)
 
-    def hgetall(self, key: str, native: bool = False) -> dict[Any, Any]:
+    def hgetall(self, key: str, native: Optional[bool] = None) -> dict[Any, Any]:
         return _credish.hgetall(self._db, key, native=native)
 
-    def hkeys(self, key: str, native: bool = False) -> list[Any]:
+    def hkeys(self, key: str, native: Optional[bool] = None) -> list[Any]:
         return _credish.hkeys(self._db, key, native=native)
 
-    def hvals(self, key: str, native: bool = False) -> list[Any]:
+    def hvals(self, key: str, native: Optional[bool] = None) -> list[Any]:
         return _credish.hvals(self._db, key, native=native)
 
     def hlen(self, key: str) -> int:

@@ -319,13 +319,18 @@ PyObject *py_hget(PyObject *self, PyObject *args, PyObject *kw)
     (void)self;
     static char *kwlist[] = {"handle", "key", "field", "native", NULL};
     PyObject *handle, *key_obj, *field_obj;
-    int native = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|p", kwlist,
-                                     &handle, &key_obj, &field_obj, &native))
+    PyObject *native_obj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|O", kwlist,
+                                     &handle, &key_obj, &field_obj, &native_obj))
         return NULL;
     credish_store *store = credish_get_store(handle);
     if (!store)
         return NULL;
+    int native;
+    if (native_obj == NULL || native_obj == Py_None)
+        native = store->config.decode_responses;
+    else
+        native = PyObject_IsTrue(native_obj);
     char *key;
     int keylen;
     if (!decode_key(key_obj, &key, &keylen))
@@ -404,9 +409,9 @@ PyObject *py_hmget(PyObject *self, PyObject *args, PyObject *kw)
     (void)self;
     static char *kwlist[] = {"handle", "key", "fields", "native", NULL};
     PyObject *handle, *key_obj, *fields_list;
-    int native = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|p", kwlist,
-                                     &handle, &key_obj, &fields_list, &native))
+    PyObject *native_obj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OOO|O", kwlist,
+                                     &handle, &key_obj, &fields_list, &native_obj))
         return NULL;
     if (!PyList_Check(fields_list))
     {
@@ -416,6 +421,11 @@ PyObject *py_hmget(PyObject *self, PyObject *args, PyObject *kw)
     credish_store *store = credish_get_store(handle);
     if (!store)
         return NULL;
+    int native;
+    if (native_obj == NULL || native_obj == Py_None)
+        native = store->config.decode_responses;
+    else
+        native = PyObject_IsTrue(native_obj);
     char *key;
     int keylen;
     if (!decode_key(key_obj, &key, &keylen))
@@ -612,12 +622,17 @@ PyObject *py_hgetall(PyObject *self, PyObject *args, PyObject *kw)
     (void)self;
     static char *kwlist[] = {"handle", "key", "native", NULL};
     PyObject *handle, *key_obj;
-    int native = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+    PyObject *native_obj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|O", kwlist, &handle, &key_obj, &native_obj))
         return NULL;
     credish_store *store = credish_get_store(handle);
     if (!store)
         return NULL;
+    int native;
+    if (native_obj == NULL || native_obj == Py_None)
+        native = store->config.decode_responses;
+    else
+        native = PyObject_IsTrue(native_obj);
     char *key;
     int keylen;
     if (!decode_key(key_obj, &key, &keylen))
@@ -721,12 +736,17 @@ PyObject *py_hkeys(PyObject *self, PyObject *args, PyObject *kw)
     (void)self;
     static char *kwlist[] = {"handle", "key", "native", NULL};
     PyObject *handle, *key_obj;
-    int native = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+    PyObject *native_obj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|O", kwlist, &handle, &key_obj, &native_obj))
         return NULL;
     credish_store *store = credish_get_store(handle);
     if (!store)
         return NULL;
+    int native;
+    if (native_obj == NULL || native_obj == Py_None)
+        native = store->config.decode_responses;
+    else
+        native = PyObject_IsTrue(native_obj);
     char *key;
     int keylen;
     if (!decode_key(key_obj, &key, &keylen))
@@ -739,12 +759,17 @@ PyObject *py_hvals(PyObject *self, PyObject *args, PyObject *kw)
     (void)self;
     static char *kwlist[] = {"handle", "key", "native", NULL};
     PyObject *handle, *key_obj;
-    int native = 0;
-    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|p", kwlist, &handle, &key_obj, &native))
+    PyObject *native_obj = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO|O", kwlist, &handle, &key_obj, &native_obj))
         return NULL;
     credish_store *store = credish_get_store(handle);
     if (!store)
         return NULL;
+    int native;
+    if (native_obj == NULL || native_obj == Py_None)
+        native = store->config.decode_responses;
+    else
+        native = PyObject_IsTrue(native_obj);
     char *key;
     int keylen;
     if (!decode_key(key_obj, &key, &keylen))

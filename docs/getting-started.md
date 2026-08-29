@@ -66,6 +66,7 @@ CredishClient(
     save_interval=300,
     aof_fsync=AOF_FSYNC.EVERYSEC,
     db=0,
+    decode_responses=False,
 )
 ```
 
@@ -76,6 +77,7 @@ CredishClient(
 | `save_interval` | `300` | Automatic RDB snapshot interval in seconds where applicable. |
 | `aof_fsync` | `AOF_FSYNC.EVERYSEC` | AOF fsync policy: `AOF_FSYNC.ALWAYS`, `AOF_FSYNC.EVERYSEC`, or `AOF_FSYNC.NO`. |
 | `db` | `0` | Initial logical database index. Valid indexes are `0` through `15`. |
+| `decode_responses` | `False` | If `True`, hash read operations decode responses to native Python types by default. |
 
 The client is a context manager. Prefer `with CredishClient(...) as client:` so
 native resources and persistence handles are closed cleanly.

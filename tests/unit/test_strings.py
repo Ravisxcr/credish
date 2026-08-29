@@ -144,3 +144,46 @@ def test_incrby_binary_key_survives_aof_roundtrip(tmp_path):
 
     with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
         assert c.get(binary_key) == b"8"
+
+
+def test_string_decode_responses_server_configuration(tmp_path):
+    cases = {
+        "str": "bar",
+        "int": 42,
+        "float": 3.25,
+        "bool": True,
+        "none": None,
+        "list": [1, "two", False],
+        "dict": {"name": "Ada", "ok": True, "items": [1, None]},
+    }
+    with CredishClient(data_dir=str(tmp_path), persistence="none", decode_responses=True) as client:
+        for key, value in cases.items():
+            client.set(key, value)
+            # With decode_responses=True, get() decodes by default without passing native=True
+            assert client.get(key) == value
+            # Explicit native=False overrides and returns raw bytes (or JSON string bytes)
+            if isinstance(value, str):
+                expected = value.encode()
+            elif isinstance(value, bool) or value is None or isinstance(value, (list, dict)):
+                expected = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode()
+            else:
+                expected = str(value).encode()
+            assert client.get(key, native=False) == expected
+
+        # Raw bytes written as bytes stay bytes
+        client.set("blob", b"\x00raw\x00")
+        assert client.get("blob") == b"\x00raw\x00"
+        assert client.get("blob", native=False) == b"\x00raw\x00"
+
+
+def test_string_decode_responses_session_propagation(tmp_path):
+    with CredishClient(data_dir=str(tmp_path), persistence="none", decode_responses=True) as root:
+        sess0 = root.session()
+        sess1 = root.client(db=1)
+
+        sess0.set("s0", "root_str")
+        sess1.set("s1", {"num": 100})
+
+        assert sess0.get("s0") == "root_str"
+        assert sess1.get("s1") == {"num": 100}
+

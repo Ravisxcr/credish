@@ -276,3 +276,69 @@ def test_hash_persistence_aof_roundtrip(tmp_path):
 
     with CredishClient(data_dir=str(tmp_path), persistence="aof") as c:
         assert c.hgetall("h") == {b"a": b"10", b"c": b"3"}
+
+
+def test_hash_decode_responses_server_configuration(tmp_path):
+    with CredishClient(data_dir=str(tmp_path), persistence="none", decode_responses=True) as client:
+        client.hset("h", mapping={"str_field": "hello", "int_field": -42, "float_field": 3.25})
+        client.hset("h", "bytes_field", b"\x00raw\x00")
+        client.hincrby("h", "counter", 7)
+
+        # decode_responses=True decodes hash values without passing native=True
+        assert client.hget("h", "str_field") == "hello"
+        assert client.hget("h", "int_field") == -42
+        assert client.hget("h", "float_field") == 3.25
+        assert client.hget("h", "bytes_field") == b"\x00raw\x00"
+        assert client.hget("h", "counter") == 7
+        assert client.hget("h", "missing") is None
+
+        # hmget decodes responses without passing native=True
+        assert client.hmget("h", ["int_field", "str_field", "missing"]) == [-42, "hello", None]
+
+        # hgetall decodes fields and values
+        assert client.hgetall("h") == {
+            "str_field": "hello",
+            "int_field": -42,
+            "float_field": 3.25,
+            "bytes_field": b"\x00raw\x00",
+            "counter": 7,
+        }
+
+        # hkeys and hvals decode without passing native=True
+        assert sorted(client.hkeys("h")) == [
+            "bytes_field",
+            "counter",
+            "float_field",
+            "int_field",
+            "str_field",
+        ]
+        assert sorted(client.hvals("h"), key=str) == sorted(
+            ["hello", -42, 3.25, b"\x00raw\x00", 7], key=str
+        )
+
+        # Explicit native=False overrides decode_responses=True
+        assert client.hget("h", "int_field", native=False) == b"-42"
+        assert client.hmget("h", ["int_field"], native=False) == [b"-42"]
+        assert client.hgetall("h", native=False)["int_field".encode()] == b"-42"
+        assert all(isinstance(k, bytes) for k in client.hkeys("h", native=False))
+        assert all(isinstance(v, bytes) for v in client.hvals("h", native=False))
+
+        # get() also respects decode_responses=True by default
+        client.set("plain_str", "hello_str")
+        assert client.get("plain_str") == "hello_str"
+        assert client.get("plain_str", native=False) == b"hello_str"
+
+
+def test_hash_decode_responses_session_propagation(tmp_path):
+    with CredishClient(data_dir=str(tmp_path), persistence="none", decode_responses=True) as root:
+        sess0 = root.session()
+        sess1 = root.client(db=1)
+
+        sess0.hset("h0", "name", "root_user")
+        sess1.hset("h1", "name", "session_user")
+
+        assert sess0.hget("h0", "name") == "root_user"
+        assert sess1.hget("h1", "name") == "session_user"
+        assert sess0.hgetall("h0") == {"name": "root_user"}
+        assert sess1.hgetall("h1") == {"name": "session_user"}
+

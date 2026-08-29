@@ -29,15 +29,16 @@ static void store_capsule_destructor(PyObject *capsule) {
 
 static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kwargs) {
     (void)self;
-    static char *kwlist[] = {"data_dir","persistence","save_interval","aof_fsync","db",NULL};
+    static char *kwlist[] = {"data_dir","persistence","save_interval","aof_fsync","db","decode_responses",NULL};
     const char *data_dir = ".";
     const char *persistence = "hybrid";
     int save_interval = 300;
     const char *aof_fsync = "everysec";
     int db_id = 0;
+    int decode_responses = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ssisi", kwlist,
-            &data_dir, &persistence, &save_interval, &aof_fsync, &db_id))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ssisip", kwlist,
+            &data_dir, &persistence, &save_interval, &aof_fsync, &db_id, &decode_responses))
         return NULL;
 
     credish_config cfg = {0};
@@ -45,6 +46,7 @@ static PyObject *py_open(PyObject *self, PyObject *args, PyObject *kwargs) {
     cfg.persist_mode = parse_persist_mode(persistence);
     cfg.save_interval = save_interval;
     cfg.aof_fsync = parse_aof_fsync(aof_fsync);
+    cfg.decode_responses = decode_responses ? 1 : 0;
 
     credish_store *store = store_open(&cfg);
     if (!store) 

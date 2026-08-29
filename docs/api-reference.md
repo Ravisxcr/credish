@@ -361,7 +361,10 @@ Each field's *value* is tagged with its original Python type
 getters return the raw `bytes` payload as always; pass `native=True` to
 `hget`/`hmget`/`hgetall`/`hvals`/`hkeys` to decode values (and, for
 `hgetall`/`hkeys`, field names too) back to their original type instead —
-mirroring `get(key, native=True)` for top-level strings. Field names aren't
+mirroring `get(key, native=True)` for top-level strings. When `CredishClient`
+is initialized with `decode_responses=True`, hash getters decode values and
+field names by default without needing `native=True` on each call (explicitly
+passing `native=False` overrides the default). Field names aren't
 tagged (they're identifiers, not typed data); `native=True` decodes them as
 UTF-8 text, falling back to `bytes` for a field name that isn't valid UTF-8.
 
