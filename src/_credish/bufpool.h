@@ -18,9 +18,9 @@
  * the SDS allocator which stores alloc-size in its own header.
  */
 
-void  bufpool_init(void);
-void  bufpool_destroy(void);
+void bufpool_init(void);
+void bufpool_destroy(void);
 void *bufpool_alloc(size_t size);
-void  bufpool_free(void *ptr, size_t size);
+void bufpool_free(void *ptr, size_t size);
 
 #endif /* CREDISH_BUFPOOL_H */
