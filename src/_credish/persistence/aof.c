@@ -121,7 +121,7 @@ static void replay_cmd(credish_store *store, int db_id, int argc, char **argv, s
         /* wipe the current db */
         dict_free(db->keys);
         dict_free(db->expires);
-        /* re-create empty dicts (reuse same dictType from db.c via store_open path) */
+        /* re-create empty dicts (reuse same dict_type from db.c via store_open path) */
     } else if (credish_strcasecmp(cmd, "INCRBY") == 0) {
         ARGC_MIN(3);
         long long val = 0;

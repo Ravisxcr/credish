@@ -53,8 +53,8 @@ credishObject *obj_create_list(void) {
     return obj;
 }
 
-/* dictType for hash objects: SDS keys and SDS values */
-static dictType hash_dict_type = {
+/* dict_type for hash objects: SDS keys and SDS values */
+static dict_type hash_dict_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
     .val_dup  = (void *(*)(void *))sds_dup,
@@ -72,8 +72,8 @@ credishObject *obj_create_hash(void) {
     return obj;
 }
 
-/* dictType for sets: SDS keys, NULL values */
-static dictType set_dict_type = {
+/* dict_type for sets: SDS keys, NULL values */
+static dict_type set_dict_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
     .val_dup  = NULL,
@@ -91,14 +91,14 @@ credishObject *obj_create_set(void) {
     return obj;
 }
 
-/* dictType for zset score dict: SDS keys, double* values */
+/* dict_type for zset score dict: SDS keys, double* values */
 static void zset_val_free(void *v) { bufpool_free(v, sizeof(double)); }
 static void *zset_val_dup(void *v) {
     double *d = bufpool_alloc(sizeof(double));
     if (d) *d = *(double *)v;
     return d;
 }
-static dictType zset_dict_type = {
+static dict_type zset_dict_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
     .val_dup  = zset_val_dup,

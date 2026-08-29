@@ -21,8 +21,8 @@ static int sweep_db_sample(credish_db *db, unsigned int *seed) {
     if (total == 0) return 0;
 
     size_t offset = (size_t)(credish_rand_r(seed) % (unsigned int)total);
-    dictIterator *it = dict_iter_new(db->expires);
-    dictEntry    *e;
+    dict_iterator *it = dict_iter_new(db->expires);
+    dict_entry    *e;
 
     sds to_del[SWEEP_SAMPLE_SIZE];
     int sampled = 0;

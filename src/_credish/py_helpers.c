@@ -38,16 +38,16 @@ credish_db *credish_get_db(PyObject *handle, credish_store *store) {
 }
 
 /* Decode a Python str/bytes arg to (char*, int) */
-int decode_key(PyObject *obj, char **out, int *out_len) {
-    if (PyBytes_Check(obj)) {
-        *out = PyBytes_AS_STRING(obj);
-        *out_len = (int)PyBytes_GET_SIZE(obj);
+int decode_key(PyObject *pyobj, char **out, int *out_len) {
+    if (PyBytes_Check(pyobj)) {
+        *out = PyBytes_AS_STRING(pyobj);
+        *out_len = (int)PyBytes_GET_SIZE(pyobj);
         return 1;
     }
-    if (PyUnicode_Check(obj)) {
-        Py_ssize_t sz;
-        *out = (char *)PyUnicode_AsUTF8AndSize(obj, &sz);
-        *out_len = (int)sz;
+    if (PyUnicode_Check(pyobj)) {
+        Py_ssize_t size;
+        *out = (char *)PyUnicode_AsUTF8AndSize(pyobj, &size);
+        *out_len = (int)size;
         return *out != NULL;
     }
     PyErr_SetString(PyExc_TypeError, "key must be str or bytes");
@@ -55,25 +55,25 @@ int decode_key(PyObject *obj, char **out, int *out_len) {
 }
 
 /* Coerce any Python value to an sds (for SET value, LPUSH members, etc.) */
-sds pyobj_to_sds(PyObject *object) {
-    if (PyBytes_Check(object))
+sds pyobj_to_sds(PyObject *pyobj) {
+    if (PyBytes_Check(pyobj))
         return sds_newlen(
-            PyBytes_AS_STRING(object),
-            (size_t)PyBytes_GET_SIZE(object)
+            PyBytes_AS_STRING(pyobj),
+            (size_t)PyBytes_GET_SIZE(pyobj)
         );
-    if (PyUnicode_Check(object)) {
-        Py_ssize_t utf8_len;
-        const char *utf8_str = PyUnicode_AsUTF8AndSize(object, &utf8_len);
-        return utf8_str ? sds_newlen(utf8_str, (size_t)utf8_len) : NULL;
+    if (PyUnicode_Check(pyobj)) {
+        Py_ssize_t pyobj_len;
+        const char *utf8_str = PyUnicode_AsUTF8AndSize(pyobj, &pyobj_len);
+        return utf8_str ? sds_newlen(utf8_str, (size_t)pyobj_len) : NULL;
     }
-    if (PyLong_Check(object)) {
-        long long int_value = PyLong_AsLongLong(object);
+    if (PyLong_Check(pyobj)) {
+        long long int_value = PyLong_AsLongLong(pyobj);
         char int_buf[24];
         int int_len = snprintf(int_buf, sizeof(int_buf), "%lld", int_value);
         return sds_newlen(int_buf, (size_t)int_len);
     }
-    if (PyFloat_Check(object)) {
-        double float_value = PyFloat_AS_DOUBLE(object);
+    if (PyFloat_Check(pyobj)) {
+        double float_value = PyFloat_AS_DOUBLE(pyobj);
         char float_buf[32];
         int float_len = snprintf(float_buf, sizeof(float_buf), "%.17g", float_value);
         return sds_newlen(float_buf, (size_t)float_len);

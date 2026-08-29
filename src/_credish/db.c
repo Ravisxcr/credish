@@ -9,14 +9,14 @@
 #include <errno.h>
 
 
-// dictType for key space: SDS keys, credishObject* values     
+// dict_type for key space: SDS keys, credishObject* values     
 
 
 static void obj_val_free(void *v) { 
     obj_free((credishObject *)v); 
 }
 
-static dictType keyspace_type = {
+static dict_type keyspace_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
     .val_dup  = NULL,
@@ -25,7 +25,7 @@ static dictType keyspace_type = {
     .val_free = obj_val_free,
 };
 
-/* dictType for expires: SDS keys, int64_t* values */
+/* dict_type for expires: SDS keys, int64_t* values */
 static void expires_val_free(void *v) { 
     free(v); 
 }
@@ -36,7 +36,7 @@ static void *expires_val_dup(void *v) {
     return p;
 }
 
-static dictType expires_type = {
+static dict_type expires_type = {
     .hash     = dict_hash_sds,
     .key_dup  = (void *(*)(void *))sds_dup,
     .val_dup  = expires_val_dup,
@@ -124,7 +124,7 @@ static int64_t now_ms(void) {
 
 int db_is_expired(credish_db *db, const char *key, int keylen) {
     sds tmp = sds_newlen(key, (size_t)keylen);
-    dictEntry *e = dict_find(db->expires, tmp);
+    dict_entry *e = dict_find(db->expires, tmp);
     sds_free(tmp);
     if (!e) return 0;
     int64_t deadline = *(int64_t *)e->v.val;

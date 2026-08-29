@@ -60,11 +60,11 @@ Python application
        - object.c        credishObject value wrapper + type/encoding tags
        - dict.c, sds.c, adlist.c, skiplist.c, intset.c   pure C data structures
        - py_helpers.c    shared Python C-API translation helpers
-       - t_string.c      string command implementations (py_set, py_get, py_incrby, ...)
-       - t_list.c        list command implementations (py_lpush, py_rpush, ...)
-       - t_key.c         generic key command implementations (py_delete, py_expire, ...)
-       - t_hash.c        hash command implementations (py_hset, py_hget, ...)
-       - t_zset.c        sorted-set command implementations (py_zadd, py_zrange, ...)
+       - py_string.c     string command implementations (py_set, py_get, py_incrby, ...)
+       - py_list.c       list command implementations (py_lpush, py_rpush, ...)
+       - py_key.c        generic key command implementations (py_delete, py_expire, ...)
+       - py_hash.c       hash command implementations (py_hset, py_hget, ...)
+       - py_zset.c       sorted-set command implementations (py_zadd, py_zrange, ...)
        - bufpool.c        slab allocator for fixed-size internal structures
        - expire.c         active expiry sweep thread
        - persistence/rdb.c, persistence/aof.c
@@ -94,7 +94,7 @@ Python application
   `credish_*` prefix. New C code should call these shims, never `pthread_*` or
   Win32 APIs directly.
 - `bufpool.c` is a 12-size-class slab allocator (8B..2048B, 4KB pages) used for
-  fixed-size structures (`credishObject`, `dictEntry`, `adlist_node`, SDS
+  fixed-size structures (`credishObject`, `dict_entry`, `adlist_node`, SDS
   buffers, ...) to avoid `malloc`/`free` on hot paths. `bufpool_free()` must be
   called with the same size that was passed to `bufpool_alloc()`.
 - Expiry is both lazy (checked on lookup in `db_lookup()`) and active (a
@@ -123,7 +123,7 @@ Python application
 
 Touch these in order (see `docs/development.md` and `docs/internals.md`):
 
-1. C data operation + `py_<cmd>` export in the corresponding `t_*.c` file (e.g. `t_string.c`, `t_list.c`, `t_hash.c`, `t_zset.c`, `t_key.c`), declared in its `.h` and registered in `credish_methods[]` in `credish_module.c`.
+1. C data operation + `py_<cmd>` export in the corresponding `py_*.c` file (e.g. `py_string.c`, `py_list.c`, `py_hash.c`, `py_zset.c`, `py_key.c`), declared in its `.h` and registered in `credish_methods[]` in `credish_module.c`.
 2. Python wrapper method in `credish/client.py` (`CredishClient` is meant to
    stay thin — behavior belongs in C).
 3. Type stub update in `credish/_credish.pyi`.

@@ -103,7 +103,7 @@ static PyObject *py_flushdb(PyObject *self, PyObject *args) {
     for (int i = 0; i < CREDISH_DB_COUNT; i++) {
         dict_free(store->dbs[i].keys);
         dict_free(store->dbs[i].expires);
-        /* dict_create requires dictType — re-init deferred; just wipe used */
+        /* dict_create requires dict_type — re-init deferred; just wipe used */
     }
 
     credish_rwlock_wrunlock(&store->lock);
@@ -190,51 +190,6 @@ static PyObject *py_select(PyObject *self, PyObject *args) {
 // Module method table
 
 static PyMethodDef credish_methods[] = {
-    {"open",     (PyCFunction)py_open,    METH_VARARGS|METH_KEYWORDS, NULL},
-    {"close",    py_close,                METH_VARARGS,               NULL},
-    {"ping",     py_ping,                 METH_VARARGS,               NULL},
-    {"flushdb",  py_flushdb,              METH_VARARGS,               NULL},
-    {"dbsize",   py_dbsize,               METH_VARARGS,               NULL},
-    {"save",     py_save,                 METH_VARARGS,               NULL},
-    {"bgsave",   py_bgsave,              METH_VARARGS,               NULL},
-    {"select",   py_select,              METH_VARARGS,               NULL},
-    {"get",      py_get,                  METH_VARARGS,               NULL},
-    {"get_encoding", py_get_encoding,     METH_VARARGS,               NULL},
-    {"set",      (PyCFunction)py_set,     METH_VARARGS|METH_KEYWORDS, NULL},
-    {"delete",   py_delete,              METH_VARARGS,               NULL},
-    {"exists",   py_exists,              METH_VARARGS,               NULL},
-    {"expire",   py_expire,              METH_VARARGS,               NULL},
-    {"pexpire",  py_pexpire,             METH_VARARGS,               NULL},
-    {"persist",  py_persist,             METH_VARARGS,               NULL},
-    {"ttl",      py_ttl,                 METH_VARARGS,               NULL},
-    {"pttl",     py_pttl,                METH_VARARGS,               NULL},
-    {"type_",    py_type,                METH_VARARGS,               NULL},
-    {"incrby",   py_incrby,              METH_VARARGS,               NULL},
-    {"lpush",    py_lpush,               METH_VARARGS,               NULL},
-    {"rpush",    py_rpush,               METH_VARARGS,               NULL},
-    {"lrange",   py_lrange,              METH_VARARGS,               NULL},
-    {"llen",     py_llen,                METH_VARARGS,               NULL},
-    {"zadd",     (PyCFunction)py_zadd,   METH_VARARGS|METH_KEYWORDS, NULL},
-    {"zrange",   (PyCFunction)py_zrange, METH_VARARGS|METH_KEYWORDS, NULL},
-    {"zrevrange",(PyCFunction)py_zrevrange, METH_VARARGS|METH_KEYWORDS, NULL},
-    {"zrank",    py_zrank,               METH_VARARGS,               NULL},
-    {"zrevrank", py_zrevrank,            METH_VARARGS,               NULL},
-    {"zscore",   py_zscore,              METH_VARARGS,               NULL},
-    {"zrem",     py_zrem,                METH_VARARGS,               NULL},
-    {"zcard",    py_zcard,               METH_VARARGS,               NULL},
-    {"zrangebyscore", (PyCFunction)py_zrangebyscore, METH_VARARGS|METH_KEYWORDS, NULL},
-    {"zincrby",  py_zincrby,             METH_VARARGS,               NULL},
-    {"hset",     (PyCFunction)py_hset,   METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hget",     (PyCFunction)py_hget,   METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hmset",    py_hmset,               METH_VARARGS,               NULL},
-    {"hmget",    (PyCFunction)py_hmget,  METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hdel",     py_hdel,                METH_VARARGS,               NULL},
-    {"hexists",  py_hexists,             METH_VARARGS,               NULL},
-    {"hgetall",  (PyCFunction)py_hgetall,METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hkeys",    (PyCFunction)py_hkeys,  METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hvals",    (PyCFunction)py_hvals,  METH_VARARGS|METH_KEYWORDS, NULL},
-    {"hlen",     py_hlen,                METH_VARARGS,               NULL},
-    {"hincrby",  py_hincrby,             METH_VARARGS,               NULL},
     {"open",     (PyCFunction)(void(*)(void))py_open,    METH_VARARGS|METH_KEYWORDS, NULL},
     {"close",    py_close,                               METH_VARARGS,               NULL},
     {"ping",     py_ping,                                METH_VARARGS,               NULL},
@@ -285,10 +240,6 @@ static PyMethodDef credish_methods[] = {
 
 static struct PyModuleDef credish_module = {
     PyModuleDef_HEAD_INIT,
-    "_credish",
-    "Credish C extension — Redis-compatible in-process cache",
-    -1,
-    credish_methods,
     .m_name = "_credish",
     .m_doc = "Credish C extension — Redis-compatible in-process cache",
     .m_size = -1,

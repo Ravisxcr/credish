@@ -24,7 +24,7 @@ credish._credish C extension
   +-- persistence             src/_credish/persistence/{rdb,aof}.c
   +-- cross-platform shims    platform.h
   +-- python helpers          py_helpers.c
-  +-- command exports         t_string.c, t_list.c, t_key.c, t_hash.c, t_zset.c
+  +-- command exports         py_string.c, py_list.c, py_key.c, py_hash.c, py_zset.c
   +-- module entry point      credish_module.c
 ```
 
@@ -163,7 +163,7 @@ as a trailing `FMT <tag>` argument, so a reload preserves the original type.
 ## Buffer Pool and Pages
 
 `src/_credish/bufpool.c` implements a small slab allocator used by fixed-size
-internal structures such as `credishObject`, `dictEntry`, `dictIterator`,
+internal structures such as `credishObject`, `dict_entry`, `dict_iterator`,
 `adlist_node`, `zset`, and many SDS allocations.
 
 The goal is to avoid calling system `malloc()` and `free()` on hot paths for
@@ -297,18 +297,18 @@ to the pool with its original allocation size.
 
 ## Dictionary
 
-`dict` is Credish's generic hash table. It is parameterized by a `dictType`
+`dict` is Credish's generic hash table. It is parameterized by a `dict_type`
 function table:
 
 ```c
-typedef struct dictType {
+typedef struct dict_type {
     uint64_t (*hash)(const void *key);
     void    *(*key_dup)(void *key);
     void    *(*val_dup)(void *val);
     int      (*key_cmp)(const void *a, const void *b);
     void     (*key_free)(void *key);
     void     (*val_free)(void *val);
-} dictType;
+} dict_type;
 ```
 
 This lets the same dictionary implementation back multiple structures:
@@ -467,11 +467,11 @@ one global mutex.
 ## Python Boundary
 
 The C extension organizes command exports into domain-specific command files:
-- `t_string.c` (`SET`, `GET`, `INCRBY`, ...)
-- `t_list.c` (`LPUSH`, `RPUSH`, `LRANGE`, `LLEN`, ...)
-- `t_key.c` (`DEL`, `EXISTS`, `EXPIRE`, `TTL`, `TYPE`, ...)
-- `t_hash.c` (`HSET`, `HGET`, `HGETALL`, ...)
-- `t_zset.c` (`ZADD`, `ZRANGE`, `ZREM`, ...)
+- `py_string.c` (`SET`, `GET`, `INCRBY`, ...)
+- `py_list.c` (`LPUSH`, `RPUSH`, `LRANGE`, `LLEN`, ...)
+- `py_key.c` (`DEL`, `EXISTS`, `EXPIRE`, `TTL`, `TYPE`, ...)
+- `py_hash.c` (`HSET`, `HGET`, `HGETALL`, ...)
+- `py_zset.c` (`ZADD`, `ZRANGE`, `ZREM`, ...)
 - `py_helpers.c` (shared Python conversion and capsule utilities)
 
 These are registered in the `credish_methods[]` table in `credish_module.c`.
@@ -482,7 +482,7 @@ explicitly.
 The public `CredishClient` in `credish/client.py` is a thin wrapper. New commands
 usually need changes in three places:
 
-1. C implementation in the relevant `t_*.c` file and export in `credish_module.c`.
+1. C implementation in the relevant `py_*.c` file and export in `credish_module.c`.
 2. Python wrapper method in `credish/client.py`.
 3. Type stub in `credish/_credish.pyi`.
 

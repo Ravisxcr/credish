@@ -144,9 +144,9 @@ static int save_list(FILE *f, credishObject *o) {
 static int save_hash(FILE *f, credishObject *o) {
     dict *d = (dict *)o->ptr;
     if (w_u32(f, (uint32_t)dict_size(d)) != 0) return -1;
-    dictIterator *it = dict_iter_new(d);
+    dict_iterator *it = dict_iter_new(d);
     if (!it) return -1;
-    dictEntry *e;
+    dict_entry *e;
     while ((e = dict_iter_next(it))) {
         if (w_sds(f, (sds)e->key) != 0 || w_sds(f, (sds)e->v.val) != 0) {
             dict_iter_free(it);
@@ -160,9 +160,9 @@ static int save_hash(FILE *f, credishObject *o) {
 static int save_set(FILE *f, credishObject *o) {
     dict *d = (dict *)o->ptr;
     if (w_u32(f, (uint32_t)dict_size(d)) != 0) return -1;
-    dictIterator *it = dict_iter_new(d);
+    dict_iterator *it = dict_iter_new(d);
     if (!it) return -1;
-    dictEntry *e;
+    dict_entry *e;
     while ((e = dict_iter_next(it)))
         if (w_sds(f, (sds)e->key) != 0) {
             dict_iter_free(it);
@@ -175,9 +175,9 @@ static int save_set(FILE *f, credishObject *o) {
 static int save_zset(FILE *f, credishObject *o) {
     zset *zs = (zset *)o->ptr;
     if (w_u32(f, (uint32_t)dict_size(zs->dict)) != 0) return -1;
-    dictIterator *it = dict_iter_new(zs->dict);
+    dict_iterator *it = dict_iter_new(zs->dict);
     if (!it) return -1;
-    dictEntry *e;
+    dict_entry *e;
     while ((e = dict_iter_next(it))) {
         if (w_sds(f, (sds)e->key) != 0) {
             dict_iter_free(it);
@@ -228,9 +228,9 @@ int rdb_save(credish_store *store) {
             w_u32(f, (uint32_t)dict_size(db->keys)) != 0)
             goto fail;
 
-        dictIterator *it = dict_iter_new(db->keys);
+        dict_iterator *it = dict_iter_new(db->keys);
         if (!it) goto fail;
-        dictEntry    *e;
+        dict_entry    *e;
         while ((e = dict_iter_next(it))) {
             credishObject *o = (credishObject *)e->v.val;
             if (w_u8(f, (uint8_t)o->type) != 0) { dict_iter_free(it); goto fail; }

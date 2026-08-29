@@ -14,7 +14,7 @@
  * The same `size` value MUST be passed to both bufpool_alloc and
  * bufpool_free for the same pointer — the pool uses it to locate the
  * correct size class.  This matches the usage pattern of every fixed-size
- * struct in the codebase (credishObject, dictEntry, adlist_node, …) and also
+ * struct in the codebase (credishObject, dict_entry, adlist_node, …) and also
  * the SDS allocator which stores alloc-size in its own header.
  */
 

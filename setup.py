@@ -7,11 +7,6 @@ _base = os.path.dirname(os.path.abspath(__file__))
 _credish_sources = [
     "src/_credish/credish_module.c",
     "src/_credish/py_helpers.c",
-    "src/_credish/t_string.c",
-    "src/_credish/t_list.c",
-    "src/_credish/t_key.c",
-    "src/_credish/t_hash.c",
-    "src/_credish/t_zset.c",
     "src/_credish/py_string.c",
     "src/_credish/py_list.c",
     "src/_credish/py_key.c",
