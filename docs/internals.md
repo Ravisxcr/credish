@@ -23,7 +23,9 @@ credish._credish C extension
   +-- expiry worker           expire
   +-- persistence             src/_credish/persistence/{rdb,aof}.c
   +-- cross-platform shims    platform.h
-  +-- command exports         credish_module.c, sorted_set.c
+  +-- python helpers          py_helpers.c
+  +-- command exports         t_string.c, t_list.c, t_key.c, t_hash.c, t_zset.c
+  +-- module entry point      credish_module.c
 ```
 
 The Python client keeps an opaque native handle returned by `_credish.open()`.
@@ -464,8 +466,15 @@ one global mutex.
 
 ## Python Boundary
 
-The C module exports functions through `credish_module.c` and
-`sorted_set.c` (sorted-set commands are implemented and exported separately).
+The C extension organizes command exports into domain-specific command files:
+- `t_string.c` (`SET`, `GET`, `INCRBY`, ...)
+- `t_list.c` (`LPUSH`, `RPUSH`, `LRANGE`, `LLEN`, ...)
+- `t_key.c` (`DEL`, `EXISTS`, `EXPIRE`, `TTL`, `TYPE`, ...)
+- `t_hash.c` (`HSET`, `HGET`, `HGETALL`, ...)
+- `t_zset.c` (`ZADD`, `ZRANGE`, `ZREM`, ...)
+- `py_helpers.c` (shared Python conversion and capsule utilities)
+
+These are registered in the `credish_methods[]` table in `credish_module.c`.
 `_credish.open()` returns a Python capsule containing `credish_store *`, and
 the capsule destructor closes the store if the user did not call `close()`
 explicitly.
@@ -473,8 +482,8 @@ explicitly.
 The public `CredishClient` in `credish/client.py` is a thin wrapper. New commands
 usually need changes in three places:
 
-1. C implementation and module export (`credish_module.c` or `sorted_set.c`).
-2. Python wrapper method.
+1. C implementation in the relevant `t_*.c` file and export in `credish_module.c`.
+2. Python wrapper method in `credish/client.py`.
 3. Type stub in `credish/_credish.pyi`.
 
 Tests should cover the public wrapper rather than only the C function, because

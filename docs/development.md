@@ -20,7 +20,12 @@ src/_credish/
   dict.c / dict.h
   adlist.c / adlist.h
   skiplist.c / skiplist.h
-  sorted_set.c / sorted_set.h
+  py_helpers.c / py_helpers.h
+  t_string.c / t_string.h
+  t_list.c / t_list.h
+  t_key.c / t_key.h
+  t_hash.c / t_hash.h
+  t_zset.c / t_zset.h
   intset.c / intset.h
   bufpool.c / bufpool.h
   expire.c / expire.h
@@ -34,8 +39,9 @@ tests/
 ```
 
 The Python `CredishClient` is intentionally thin. Most behavior should live in
-`src/_credish/` and be exported through `credish_module.c` (or `sorted_set.c`
-for sorted-set commands), then wrapped in `credish/client.py`. `platform.h`
+`src/_credish/` and be exported through domain command files (`t_string.c`,
+`t_list.c`, `t_key.c`, `t_hash.c`, `t_zset.c`), registered in `credish_module.c`,
+then wrapped in `credish/client.py`. `platform.h`
 is the only place OS-specific code (pthreads vs. Windows threading APIs)
 should live — new C code should go through its `credish_*` shims rather than
 calling `pthread_*` or Win32 APIs directly.
@@ -115,9 +121,8 @@ task setup-qemu
 
 When adding a new command:
 
-1. Implement the C data operation.
-2. Export it in `credish_module.c` (or `sorted_set.c` for sorted-set commands)
-   and register it in the module's `PyMethodDef` table.
+1. Implement the C data operation in the relevant `t_*.c` file (e.g. `t_string.c`, `t_list.c`, `t_hash.c`, `t_zset.c`, `t_key.c`).
+2. Export it in `credish_module.c` and register it in the module's `PyMethodDef` table.
 3. Add or update the Python wrapper in `credish/client.py`.
 4. Update `credish/_credish.pyi`.
 5. Add focused tests under `tests/unit/`.

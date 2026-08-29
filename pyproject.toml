@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Redis-compatible in-process cache as a Python C extension"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = {text = "MIT"}
 keywords = ["redis", "cache", "in-process", "key-value", "data-structures"]
 classifiers = [
     "Development Status :: 3 - Alpha",

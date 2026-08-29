@@ -58,9 +58,13 @@ Python application
   -> credish._credish C extension
        - db.c            key space / logical DB layer
        - object.c        credishObject value wrapper + type/encoding tags
-       - dict.c, sds.c, adlist.c, skiplist.c, intset.c   data structures
-       - hash.c          hash command implementations (py_hset, py_hget, ...)
-       - sorted_set.c    sorted-set command implementations (py_zadd, ...)
+       - dict.c, sds.c, adlist.c, skiplist.c, intset.c   pure C data structures
+       - py_helpers.c    shared Python C-API translation helpers
+       - t_string.c      string command implementations (py_set, py_get, py_incrby, ...)
+       - t_list.c        list command implementations (py_lpush, py_rpush, ...)
+       - t_key.c         generic key command implementations (py_delete, py_expire, ...)
+       - t_hash.c        hash command implementations (py_hset, py_hget, ...)
+       - t_zset.c        sorted-set command implementations (py_zadd, py_zrange, ...)
        - bufpool.c        slab allocator for fixed-size internal structures
        - expire.c         active expiry sweep thread
        - persistence/rdb.c, persistence/aof.c
@@ -119,10 +123,7 @@ Python application
 
 Touch these in order (see `docs/development.md` and `docs/internals.md`):
 
-1. C data operation + `py_<cmd>` export, registered in the shared
-   `credish_methods[]` table in `credish_module.c` (implementations for hash
-   and sorted-set commands live in `hash.c`/`sorted_set.c` respectively but
-   are declared in their `.h` and registered in the same table).
+1. C data operation + `py_<cmd>` export in the corresponding `t_*.c` file (e.g. `t_string.c`, `t_list.c`, `t_hash.c`, `t_zset.c`, `t_key.c`), declared in its `.h` and registered in `credish_methods[]` in `credish_module.c`.
 2. Python wrapper method in `credish/client.py` (`CredishClient` is meant to
    stay thin — behavior belongs in C).
 3. Type stub update in `credish/_credish.pyi`.
