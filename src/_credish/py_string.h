@@ -10,4 +10,3 @@ PyObject *py_set(PyObject *self, PyObject *args, PyObject *kw);
 PyObject *py_incrby(PyObject *self, PyObject *args);
 
 #endif /* CREDISH_PY_STRING_H */
-
