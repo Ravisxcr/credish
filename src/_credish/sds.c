@@ -126,9 +126,11 @@ sds sds_catlenprintf(sds dst_sds, const char *format_string, ...)
 {
     va_list extra_args;
     char temp_buffer[1024];
+
     va_start(extra_args, format_string);
     int formatted_len = vsnprintf(temp_buffer, sizeof(temp_buffer), format_string, extra_args);
     va_end(extra_args);
+    
     if (formatted_len < 0)
         return dst_sds;
     return sds_catlen(dst_sds, temp_buffer, (size_t)formatted_len < sizeof(temp_buffer) ? (size_t)formatted_len : sizeof(temp_buffer) - 1);

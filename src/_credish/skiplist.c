@@ -2,162 +2,197 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int zsl_random_level(void) {
+static int zsl_random_level(void)
+{
     int level = 1;
     while ((rand() & 0xFFFF) < (int)(ZSKIPLIST_P * 0xFFFF))
         level++;
     return level < ZSKIPLIST_MAXLEVEL ? level : ZSKIPLIST_MAXLEVEL;
 }
 
-static zskiplistNode *zsl_node_create(int level, double score, sds member) {
-    zskiplistNode *n = malloc(sizeof(*n) + level * sizeof(n->level[0]));
-    if (!n) return NULL;
-    n->score    = score;
-    n->member   = member;
-    n->backward = NULL;
-    for (int i = 0; i < level; i++) {
-        n->level[i].forward = NULL;
-        n->level[i].span    = 0;
+static zskiplist_node *zsl_node_create(int level, double score, sds member)
+{
+    zskiplist_node *zsl_node = malloc(sizeof(*zsl_node) + level * sizeof(zsl_node->level[0]));
+    if (!zsl_node)
+        return NULL;
+    zsl_node->score = score;
+    zsl_node->member = member;
+    zsl_node->backward = NULL;
+    for (int i = 0; i < level; i++)
+    {
+        zsl_node->level[i].forward = NULL;
+        zsl_node->level[i].span = 0;
     }
-    return n;
+    return zsl_node;
 }
 
-zskiplist *zsl_create(void) {
+zskiplist *zsl_create(void)
+{
     zskiplist *zsl = malloc(sizeof(*zsl));
-    if (!zsl) return NULL;
-    zsl->level  = 1;
+    if (!zsl)
+        return NULL;
+    zsl->level = 1;
     zsl->length = 0;
     /* Sentinel header: no member, score -inf */
     zsl->header = zsl_node_create(ZSKIPLIST_MAXLEVEL, 0, NULL);
-    zsl->tail   = NULL;
+    zsl->tail = NULL;
     return zsl;
 }
 
-void zsl_free(zskiplist *zsl) {
-    zskiplistNode *n = zsl->header->level[0].forward;
-    free(zsl->header);
-    while (n) {
-        zskiplistNode *next = n->level[0].forward;
-        sds_free(n->member);
-        free(n);
-        n = next;
+void zsl_free(zskiplist *zsl_ptr)
+{
+    zskiplist_node *curr_zsl_node = zsl_ptr->header->level[0].forward;
+    free(zsl_ptr->header);
+    while (curr_zsl_node)
+    {
+        zskiplist_node *next_zsl_node = curr_zsl_node->level[0].forward;
+        sds_free(curr_zsl_node->member);
+        free(curr_zsl_node);
+        curr_zsl_node = next_zsl_node;
     }
-    free(zsl);
+    free(zsl_ptr);
 }
 
 /* Returns 1 if (score1,member1) > (score2,member2) */
-static int node_gt(double score1, sds member1, double score2, sds member2) {
-    if (score1 != score2) return score1 > score2;
+static int node_gt(double score1, sds member1, double score2, sds member2)
+{
+    if (score1 != score2)
+        return score1 > score2;
     return sds_compare(member1, member2) > 0;
 }
 
 /* Returns 1 if (score1,member1) < (score2,member2) */
-static int node_lt(double score1, sds member1, double score2, sds member2) {
-    if (score1 != score2) return score1 < score2;
+static int node_lt(double score1, sds member1, double score2, sds member2)
+{
+    if (score1 != score2)
+        return score1 < score2;
     return sds_compare(member1, member2) < 0;
 }
 
-zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member) {
-    zskiplistNode *update[ZSKIPLIST_MAXLEVEL];
-    unsigned int   rank[ZSKIPLIST_MAXLEVEL];
-    zskiplistNode *x = zsl->header;
+zskiplist_node *zsl_insert(zskiplist *zsl_ptr, double score, sds member)
+{
+    zskiplist_node *predecessors[ZSKIPLIST_MAXLEVEL];
+    unsigned int prefix_ranks[ZSKIPLIST_MAXLEVEL];
+    zskiplist_node *curr_zsl_header = zsl_ptr->header;
 
-    for (int i = zsl->level - 1; i >= 0; i--) {
-        rank[i] = i == zsl->level - 1 ? 0 : rank[i + 1];
-        while (x->level[i].forward &&
-               node_lt(x->level[i].forward->score,
-                       x->level[i].forward->member,
-                       score, member)) {
-            rank[i] += x->level[i].span;
-            x = x->level[i].forward;
+    for (int node_idx = zsl_ptr->level - 1; node_idx >= 0; node_idx--)
+    {
+        prefix_ranks[node_idx] = node_idx == zsl_ptr->level - 1 ? 0 : prefix_ranks[node_idx + 1];
+        while (curr_zsl_header->level[node_idx].forward &&
+               node_lt(curr_zsl_header->level[node_idx].forward->score,
+                       curr_zsl_header->level[node_idx].forward->member,
+                       score, member))
+        {
+            prefix_ranks[node_idx] += curr_zsl_header->level[node_idx].span;
+            curr_zsl_header = curr_zsl_header->level[node_idx].forward;
         }
-        update[i] = x;
+        predecessors[node_idx] = curr_zsl_header;
     }
 
     int level = zsl_random_level();
-    if (level > zsl->level) {
-        for (int i = zsl->level; i < level; i++) {
-            rank[i]           = 0;
-            update[i]         = zsl->header;
-            update[i]->level[i].span = zsl->length;
+    if (level > zsl_ptr->level)
+    {
+        for (int i = zsl_ptr->level; i < level; i++)
+        {
+            prefix_ranks[i] = 0;
+            predecessors[i] = zsl_ptr->header;
+            predecessors[i]->level[i].span = zsl_ptr->length;
         }
-        zsl->level = level;
+        zsl_ptr->level = level;
     }
 
-    x = zsl_node_create(level, score, member);
-    for (int i = 0; i < level; i++) {
-        x->level[i].forward         = update[i]->level[i].forward;
-        update[i]->level[i].forward = x;
-        x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
-        update[i]->level[i].span = (rank[0] - rank[i]) + 1;
+    curr_zsl_header = zsl_node_create(level, score, member);
+    for (int i = 0; i < level; i++)
+    {
+        curr_zsl_header->level[i].forward = predecessors[i]->level[i].forward;
+        predecessors[i]->level[i].forward = curr_zsl_header;
+        curr_zsl_header->level[i].span = predecessors[i]->level[i].span - (prefix_ranks[0] - prefix_ranks[i]);
+        predecessors[i]->level[i].span = (prefix_ranks[0] - prefix_ranks[i]) + 1;
     }
-    for (int i = level; i < zsl->level; i++)
-        update[i]->level[i].span++;
+    for (int i = level; i < zsl_ptr->level; i++)
+        predecessors[i]->level[i].span++;
 
-    x->backward = (update[0] == zsl->header) ? NULL : update[0];
-    if (x->level[0].forward) x->level[0].forward->backward = x;
-    else                      zsl->tail = x;
-    zsl->length++;
-    return x;
+    curr_zsl_header->backward = (predecessors[0] == zsl_ptr->header) ? NULL : predecessors[0];
+    if (curr_zsl_header->level[0].forward)
+        curr_zsl_header->level[0].forward->backward = curr_zsl_header;
+    else
+        zsl_ptr->tail = curr_zsl_header;
+    zsl_ptr->length++;
+    return curr_zsl_header;
 }
 
-int zsl_delete(zskiplist *zsl, double score, sds member) {
-    zskiplistNode *update[ZSKIPLIST_MAXLEVEL];
-    zskiplistNode *x = zsl->header;
-    for (int i = zsl->level - 1; i >= 0; i--) {
-        while (x->level[i].forward &&
-               node_lt(x->level[i].forward->score,
-                       x->level[i].forward->member, score, member))
-            x = x->level[i].forward;
-        update[i] = x;
+int zsl_delete(zskiplist *zsl_ptr, double score, sds member)
+{
+    zskiplist_node *predecessors[ZSKIPLIST_MAXLEVEL];
+    zskiplist_node *curr_zsl_header = zsl_ptr->header;
+    for (int i = zsl_ptr->level - 1; i >= 0; i--)
+    {
+        while (curr_zsl_header->level[i].forward &&
+               node_lt(curr_zsl_header->level[i].forward->score,
+                       curr_zsl_header->level[i].forward->member, score, member))
+            curr_zsl_header = curr_zsl_header->level[i].forward;
+        predecessors[i] = curr_zsl_header;
     }
-    x = x->level[0].forward;
-    if (!x || x->score != score || sds_compare(x->member, member) != 0) return 0;
+    curr_zsl_header = curr_zsl_header->level[0].forward;
+    if (!curr_zsl_header || curr_zsl_header->score != score || sds_compare(curr_zsl_header->member, member) != 0)
+        return 0;
 
-    for (int i = 0; i < zsl->level; i++) {
-        if (update[i]->level[i].forward != x) {
-            update[i]->level[i].span--;
+    for (int i = 0; i < zsl_ptr->level; i++)
+    {
+        if (predecessors[i]->level[i].forward != curr_zsl_header)
+        {
+            predecessors[i]->level[i].span--;
             continue;
         }
-        update[i]->level[i].span   += x->level[i].span - 1;
-        update[i]->level[i].forward = x->level[i].forward;
+        predecessors[i]->level[i].span += curr_zsl_header->level[i].span - 1;
+        predecessors[i]->level[i].forward = curr_zsl_header->level[i].forward;
     }
-    if (x->level[0].forward) x->level[0].forward->backward = x->backward;
-    else                      zsl->tail = x->backward;
+    if (curr_zsl_header->level[0].forward)
+        curr_zsl_header->level[0].forward->backward = curr_zsl_header->backward;
+    else
+        zsl_ptr->tail = curr_zsl_header->backward;
 
-    while (zsl->level > 1 && !zsl->header->level[zsl->level - 1].forward)
-        zsl->level--;
-    sds_free(x->member);
-    free(x);
-    zsl->length--;
+    while (zsl_ptr->level > 1 && !zsl_ptr->header->level[zsl_ptr->level - 1].forward)
+        zsl_ptr->level--;
+    sds_free(curr_zsl_header->member);
+    free(curr_zsl_header);
+    zsl_ptr->length--;
     return 1;
 }
 
-unsigned long zsl_get_rank(zskiplist *zsl, double score, sds member) {
-    zskiplistNode *x = zsl->header;
-    unsigned long rank = 0;
-    for (int i = zsl->level - 1; i >= 0; i--) {
-        while (x->level[i].forward &&
-               !node_gt(x->level[i].forward->score,
-                        x->level[i].forward->member,
-                        score, member)) {
-            rank += x->level[i].span;
-            x = x->level[i].forward;
+unsigned long zsl_get_rank(zskiplist *zsl_ptr, double score, sds member)
+{
+    zskiplist_node *curr_zsl_header = zsl_ptr->header;
+    unsigned long accumulated_rank = 0;
+    for (int i = zsl_ptr->level - 1; i >= 0; i--)
+    {
+        while (curr_zsl_header->level[i].forward &&
+               !node_gt(curr_zsl_header->level[i].forward->score,
+                        curr_zsl_header->level[i].forward->member,
+                        score, member))
+        {
+            accumulated_rank += curr_zsl_header->level[i].span;
+            curr_zsl_header = curr_zsl_header->level[i].forward;
         }
-        if (x->member && sds_compare(x->member, member) == 0) return rank;
+        if (curr_zsl_header->member && sds_compare(curr_zsl_header->member, member) == 0)
+            return accumulated_rank;
     }
     return 0;
 }
 
-zskiplistNode *zsl_get_element_by_rank(zskiplist *zsl, unsigned long rank) {
-    zskiplistNode *x = zsl->header;
-    unsigned long traversed = 0;
-    for (int i = zsl->level - 1; i >= 0; i--) {
-        while (x->level[i].forward && traversed + x->level[i].span <= rank) {
-            traversed += x->level[i].span;
-            x = x->level[i].forward;
+zskiplist_node *zsl_get_element_by_rank(zskiplist *zsl, unsigned long rank)
+{
+    zskiplist_node *curr_zsl_header = zsl->header;
+    unsigned long accumulated_rank = 0;
+    for (int i = zsl->level - 1; i >= 0; i--)
+    {
+        while (curr_zsl_header->level[i].forward && accumulated_rank + curr_zsl_header->level[i].span <= rank)
+        {
+            accumulated_rank += curr_zsl_header->level[i].span;
+            curr_zsl_header = curr_zsl_header->level[i].forward;
         }
-        if (traversed == rank) return x;
+        if (accumulated_rank == rank)
+            return curr_zsl_header;
     }
     return NULL;
 }

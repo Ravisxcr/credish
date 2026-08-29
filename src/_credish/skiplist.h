@@ -5,30 +5,33 @@
 #include <stdint.h>
 
 #define ZSKIPLIST_MAXLEVEL 32
-#define ZSKIPLIST_P        0.25
+#define ZSKIPLIST_P 0.25
 
-typedef struct zskiplistNode {
-    sds    member;
+typedef struct zskiplist_node
+{
+    sds member;
     double score;
-    struct zskiplistNode *backward;
-    struct {
-        struct zskiplistNode *forward;
+    struct zskiplist_node *backward;
+    struct
+    {
+        struct zskiplist_node *forward;
         unsigned int span;
     } level[];
-} zskiplistNode;
+} zskiplist_node;
 
-typedef struct zskiplist {
-    zskiplistNode *header;
-    zskiplistNode *tail;
-    unsigned long  length;
-    int            level;
+typedef struct zskiplist
+{
+    zskiplist_node *header;
+    zskiplist_node *tail;
+    unsigned long length;
+    int level;
 } zskiplist;
 
-zskiplist     *zsl_create(void);
-void           zsl_free(zskiplist *zsl);
-zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member);
-int            zsl_delete(zskiplist *zsl, double score, sds member);
-unsigned long  zsl_get_rank(zskiplist *zsl, double score, sds member);
-zskiplistNode *zsl_get_element_by_rank(zskiplist *zsl, unsigned long rank);
+zskiplist *zsl_create(void);
+void zsl_free(zskiplist *zsl);
+zskiplist_node *zsl_insert(zskiplist *zsl, double score, sds member);
+int zsl_delete(zskiplist *zsl, double score, sds member);
+unsigned long zsl_get_rank(zskiplist *zsl, double score, sds member);
+zskiplist_node *zsl_get_element_by_rank(zskiplist *zsl, unsigned long rank);
 
 #endif /* CREDISH_SKIPLIST_H */

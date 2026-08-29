@@ -258,14 +258,14 @@ static PyObject *py_zrange_common(PyObject *self, PyObject *args, PyObject *kw, 
     PyObject *result = PyList_New(0);
     if (result && start <= stop && len > 0) {
         if (!reverse) {
-            zskiplistNode *x = zsl_get_element_by_rank(zs->zsl, (unsigned long)start + 1);
+            zskiplist_node *x = zsl_get_element_by_rank(zs->zsl, (unsigned long)start + 1);
             for (int i = start; x && i <= stop; i++, x = x->level[0].forward) {
                 PyObject *item = zset_py_member_score(x->member, x->score, withscores);
                 if (!item || PyList_Append(result, item) < 0) { Py_XDECREF(item); Py_DECREF(result); result = NULL; break; }
                 Py_DECREF(item);
             }
         } else {
-            zskiplistNode *x = zsl_get_element_by_rank(zs->zsl, (unsigned long)(len - start));
+            zskiplist_node *x = zsl_get_element_by_rank(zs->zsl, (unsigned long)(len - start));
             for (int i = start; x && i <= stop; i++, x = x->backward) {
                 PyObject *item = zset_py_member_score(x->member, x->score, withscores);
                 if (!item || PyList_Append(result, item) < 0) { Py_XDECREF(item); Py_DECREF(result); result = NULL; break; }
@@ -474,7 +474,7 @@ PyObject *py_zrangebyscore(PyObject *self, PyObject *args, PyObject *kw) {
     }
     PyObject *result = PyList_New(0);
     if (result && min_score <= max_score) {
-        zskiplistNode *x = ((zset *)o->ptr)->zsl->header->level[0].forward;
+        zskiplist_node *x = ((zset *)o->ptr)->zsl->header->level[0].forward;
         while (x && x->score < min_score) x = x->level[0].forward;
         while (x && x->score <= max_score) {
             PyObject *item = zset_py_member_score(x->member, x->score, withscores);
