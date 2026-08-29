@@ -960,7 +960,7 @@ static PyObject *py_lrange(PyObject *self, PyObject *args) {
         if (start < 0) start = 0;
         if (stop >= len) stop = (int)len - 1;
         if (start <= stop) {
-            listNode *n = adlist_index(l, start);
+            adlist_node *n = adlist_index(l, start);
             for (int i = start; n && i <= stop; i++, n = n->next) {
                 sds sv = (sds)n->value;
                 PyObject *elem = PyBytes_FromStringAndSize(sv, (Py_ssize_t)SDS_LEN(sv));

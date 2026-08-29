@@ -133,7 +133,7 @@ static int save_string(FILE *f, credishObject *o) {
 static int save_list(FILE *f, credishObject *o) {
     adlist *l = (adlist *)o->ptr;
     if (w_u32(f, (uint32_t)l->len) != 0) return -1;
-    listNode *n = l->head;
+    adlist_node *n = l->head;
     while (n) {
         if (w_sds(f, (sds)n->value) != 0) return -1;
         n = n->next;

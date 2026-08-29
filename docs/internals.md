@@ -162,7 +162,7 @@ as a trailing `FMT <tag>` argument, so a reload preserves the original type.
 
 `src/_credish/bufpool.c` implements a small slab allocator used by fixed-size
 internal structures such as `credishObject`, `dictEntry`, `dictIterator`,
-`listNode`, `zset`, and many SDS allocations.
+`adlist_node`, `zset`, and many SDS allocations.
 
 The goal is to avoid calling system `malloc()` and `free()` on hot paths for
 small allocations. Instead, Credish allocates fixed-size slots from 4 KB pages.
@@ -326,13 +326,13 @@ Lists use `adlist`, a doubly linked list:
 
 ```c
 typedef struct adlist {
-    listNode *head;
-    listNode *tail;
+    adlist_node *head;
+    adlist_node *tail;
     size_t    len;
 } adlist;
 ```
 
-Each `listNode` stores a `void *value`, which is usually an SDS value for Redis
+Each `adlist_node` stores a `void *value`, which is usually an SDS value for Redis
 list commands. Nodes are allocated through the buffer pool. Values are freed via
 the callback passed into `adlist_free()` or `adlist_delete_node()`.
 

@@ -90,7 +90,7 @@ Python application
   `credish_*` prefix. New C code should call these shims, never `pthread_*` or
   Win32 APIs directly.
 - `bufpool.c` is a 12-size-class slab allocator (8B..2048B, 4KB pages) used for
-  fixed-size structures (`credishObject`, `dictEntry`, `listNode`, SDS
+  fixed-size structures (`credishObject`, `dictEntry`, `adlist_node`, SDS
   buffers, ...) to avoid `malloc`/`free` on hot paths. `bufpool_free()` must be
   called with the same size that was passed to `bufpool_alloc()`.
 - Expiry is both lazy (checked on lookup in `db_lookup()`) and active (a
