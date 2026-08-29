@@ -48,13 +48,13 @@ void zsl_free(zskiplist *zsl) {
 /* Returns 1 if (score1,member1) > (score2,member2) */
 static int node_gt(double score1, sds member1, double score2, sds member2) {
     if (score1 != score2) return score1 > score2;
-    return sds_cmp(member1, member2) > 0;
+    return sds_compare(member1, member2) > 0;
 }
 
 /* Returns 1 if (score1,member1) < (score2,member2) */
 static int node_lt(double score1, sds member1, double score2, sds member2) {
     if (score1 != score2) return score1 < score2;
-    return sds_cmp(member1, member2) < 0;
+    return sds_compare(member1, member2) < 0;
 }
 
 zskiplistNode *zsl_insert(zskiplist *zsl, double score, sds member) {
@@ -112,7 +112,7 @@ int zsl_delete(zskiplist *zsl, double score, sds member) {
         update[i] = x;
     }
     x = x->level[0].forward;
-    if (!x || x->score != score || sds_cmp(x->member, member) != 0) return 0;
+    if (!x || x->score != score || sds_compare(x->member, member) != 0) return 0;
 
     for (int i = 0; i < zsl->level; i++) {
         if (update[i]->level[i].forward != x) {
@@ -144,7 +144,7 @@ unsigned long zsl_get_rank(zskiplist *zsl, double score, sds member) {
             rank += x->level[i].span;
             x = x->level[i].forward;
         }
-        if (x->member && sds_cmp(x->member, member) == 0) return rank;
+        if (x->member && sds_compare(x->member, member) == 0) return rank;
     }
     return 0;
 }

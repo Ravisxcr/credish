@@ -35,7 +35,7 @@ uint64_t dict_hash_sds(const void *key) {
 }
 
 int dict_cmp_sds(const void *a, const void *b) {
-    return sds_cmp((sds)a, (sds)b);
+    return sds_compare((sds)a, (sds)b);
 }
 
 /* ------------------------------------------------------------------ */
